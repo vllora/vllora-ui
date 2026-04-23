@@ -9,19 +9,19 @@
  */
 
 import { useEffect } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useLocation } from 'react-router';
 import { FloatingAgentPanel } from './FloatingAgentPanel';
 import { AgentPanel } from './AgentPanel';
 import { useDistriConnection } from '@/providers/DistriProvider';
 import { useAgentPanel } from '@/contexts/AgentPanelContext';
 import { emitter } from '@/utils/eventEmitter';
-
-const isLucyEnabled = import.meta.env.VITE_LUCY_ENABLED === 'true';
+import { IS_LUCY_ENABLED } from '@/lib/feature-flags';
 
 export function AgentPanelWrapper() {
   const { isInitializing } = useDistriConnection();
   const { isOpen, close, mode } = useAgentPanel();
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Listen for navigation events from agent tools
   useEffect(() => {
@@ -46,7 +46,12 @@ export function AgentPanelWrapper() {
   }, [navigate]);
 
   // Don't render if Lucy is disabled or still initializing
-  if (!isLucyEnabled || isInitializing) {
+  if (!IS_LUCY_ENABLED || isInitializing) {
+    return null;
+  }
+
+  // Don't render on datasets page - it has its own embedded Lucy
+  if (location.pathname.startsWith('/finetune')) {
     return null;
   }
 

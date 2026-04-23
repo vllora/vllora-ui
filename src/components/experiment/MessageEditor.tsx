@@ -212,7 +212,7 @@ export function MessageEditor({
 
         {/* Drag overlay */}
         {isDragOver && (
-          <div className="absolute inset-0 bg-[rgb(var(--theme-500))]/10 rounded-lg flex items-center justify-center z-10 pointer-events-none">
+          <div className="absolute inset-0 bg-[rgba(var(--theme-500),0.1)] rounded-lg flex items-center justify-center z-10 pointer-events-none">
             <div className="flex items-center gap-2 text-[rgb(var(--theme-500))] font-medium">
               <Paperclip className="w-5 h-5" />
               <span>Drop file here</span>

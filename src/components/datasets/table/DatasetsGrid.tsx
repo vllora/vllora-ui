@@ -1,0 +1,389 @@
+/**
+ * DatasetsGrid
+ *
+ * Displays the list of all datasets in a grid card view.
+ */
+
+import { useState, useMemo, useEffect, useCallback } from "react";
+import { DatasetsConsumer } from "@/contexts/DatasetsContext";
+import { LoadingIndicator } from "@/components/ui/LoadingIndicator";
+import { toast } from "sonner";
+import type { FinetuneWorkflowState } from "@/types/workflow-types";
+import { emitter } from "@/utils/eventEmitter";
+import { computeFilterGroup } from "@/types/dataset-types";
+import type { DatasetFilterGroup } from "@/types/dataset-types";
+import {
+  DeleteConfirmationDialog,
+  type DeleteConfirmation,
+} from "../DeleteConfirmationDialog";
+import { WorkflowsTable } from "./WorkflowsTable";
+
+import { DatasetsEmptyState } from "./DatasetsEmptyState";
+import { DatasetsListHeader, type DatasetFilter, type DatasetSort } from "./DatasetsListHeader";
+import { DatasetsNoResultsState } from "./DatasetsNoResultsState";
+import { IngestDataDialog, type ImportResult } from "../IngestDataDialog";
+
+interface DatasetsGridProps {
+  onSelectDataset: (workflowId: string) => void;
+}
+
+export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
+  const {
+    datasets,
+    isLoading,
+    error,
+    loadDatasets,
+    getDatasetWithRecords,
+    createDataset,
+    deleteDataset,
+    renameDataset,
+    importRecords,
+    clearDatasetRecords,
+  } = DatasetsConsumer();
+
+  // Refresh dataset list on mount (catches workflows created externally by the skill)
+  useEffect(() => {
+    loadDatasets();
+  }, [loadDatasets]);
+
+  // State
+  const [recordCounts, setRecordCounts] = useState<Record<string, number>>({});
+  const [docsCounts, setDocsCounts] = useState<Record<string, number>>({});
+  const [topicStats, setTopicStats] = useState<
+    Record<string, { total: number; withTopic: number; topicCount: number }>
+  >({});
+  const [workflows, setWorkflows] = useState<Record<string, FinetuneWorkflowState>>({});
+  const [activeDryRunCounts, setActiveDryRunCounts] = useState<Record<string, number>>({});
+  const [editingDatasetId, setEditingDatasetId] = useState<string | null>(null);
+  const [editingDatasetName, setEditingDatasetName] = useState("");
+  const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmation | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeFilter, setActiveFilter] = useState<DatasetFilter>("all");
+  const [activeSort, setActiveSort] = useState<DatasetSort>({ key: "updated", dir: "desc" });
+  const [showImportDialog, setShowImportDialog] = useState(false);
+  const [importTargetDatasetId, setImportTargetDatasetId] = useState<string | null>(null);
+
+  // Compute filter group for a dataset (used for badge + filtering)
+  const getFilterGroup = (dataset: typeof datasets[number]): DatasetFilterGroup => {
+    return computeFilterGroup(
+      dataset,
+      workflows[dataset.id] ?? null,
+      activeDryRunCounts[dataset.id] ?? 0,
+    );
+  };
+
+  // Filter and sort datasets
+  const filteredDatasets = useMemo(() => {
+    let result = datasets;
+
+    // Search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(
+        (ds) =>
+          ds.name.toLowerCase().includes(query) ||
+          ds.id.toLowerCase().includes(query)
+      );
+    }
+
+    // State filter — match against filter group
+    if (activeFilter !== "all") {
+      result = result.filter((ds) => {
+        return computeFilterGroup(
+          ds,
+          workflows[ds.id] ?? null,
+          activeDryRunCounts[ds.id] ?? 0,
+        ) === activeFilter;
+      });
+    }
+
+    // Sort
+    const sorted = [...result].sort((a, b) => {
+      const dir = activeSort.dir === "asc" ? 1 : -1;
+      switch (activeSort.key) {
+        case "updated":
+          return (a.updatedAt - b.updatedAt) * dir;
+        case "created":
+          return (a.createdAt - b.createdAt) * dir;
+        case "name":
+          return a.name.localeCompare(b.name) * dir;
+        case "records": {
+          const aCount = recordCounts[a.id] ?? 0;
+          const bCount = recordCounts[b.id] ?? 0;
+          return (aCount - bCount) * dir;
+        }
+        default:
+          return 0;
+      }
+    });
+
+    return sorted;
+  }, [datasets, searchQuery, activeFilter, activeSort, recordCounts, workflows, activeDryRunCounts]);
+
+  // Derive card data directly from enriched dataset fields (from GET /finetune/workflows).
+  // No extra API calls needed — the list endpoint returns counts + job summaries.
+  const loadStats = useCallback(async () => {
+    if (datasets.length === 0) return;
+    const counts: Record<string, number> = {};
+    const docs: Record<string, number> = {};
+    const stats: Record<string, { total: number; withTopic: number; topicCount: number }> = {};
+    const wfs: Record<string, FinetuneWorkflowState> = {};
+    const dryRuns: Record<string, number> = {};
+
+    for (const ds of datasets) {
+      // Use enriched fields from the list response (no extra API calls)
+      counts[ds.id] = ds.recordsCount ?? 0;
+      docs[ds.id] = ds.knowledgeSourceCount ?? 0;
+      stats[ds.id] = { total: 0, withTopic: 0, topicCount: ds.topicCount ?? 0 };
+
+      // Eval jobs — used for filter group computation
+      const evalJobs = ds.evalJobs ?? [];
+      dryRuns[ds.id] = evalJobs.filter(j => j.status === 'running' || j.status === 'pending').length;
+
+      // Minimal workflow state for filter group computation
+      const trainingJobs = ds.trainingJobs ?? [];
+      const activeTraining = trainingJobs.find(j => ['pending', 'queued', 'running'].includes(j.status));
+      const completedTraining = trainingJobs.find(j => j.status === 'completed');
+      if (activeTraining || completedTraining) {
+        wfs[ds.id] = {
+          workflowId: ds.id,
+          currentStep: completedTraining ? 'completed' : 'training',
+          training: { status: (activeTraining ?? completedTraining)!.status },
+        } as FinetuneWorkflowState;
+      }
+    }
+
+    setRecordCounts(counts);
+    setDocsCounts(docs);
+    setTopicStats(stats);
+    setWorkflows(wfs);
+    setActiveDryRunCounts(dryRuns);
+  }, [datasets]);
+
+  // Re-runs when `datasets` changes — DatasetsContext already listens for
+  // vllora_dataset_refresh events and reloads datasets, which triggers this effect.
+  useEffect(() => {
+    loadStats();
+  }, [loadStats]);
+
+  // Re-run loadStats whenever a dry-run job updates (so progress bar refreshes during polling)
+  useEffect(() => {
+    emitter.on('vllora_eval_job_update', loadStats);
+    return () => emitter.off('vllora_eval_job_update', loadStats);
+  }, [loadStats]);
+
+  // Handlers
+  const handleRenameDataset = async (workflowId: string) => {
+    if (!editingDatasetName.trim()) {
+      toast.error("Workflow name cannot be empty");
+      return;
+    }
+    try {
+      await renameDataset(workflowId, editingDatasetName);
+      toast.success("Workflow renamed");
+      setEditingDatasetId(null);
+    } catch {
+      toast.error("Failed to rename workflow");
+    }
+  };
+
+  const handleDeleteDataset = async (workflowId: string) => {
+    try {
+      await deleteDataset(workflowId);
+      toast.success("Workflow deleted");
+    } catch (err) {
+      console.error("Failed to delete dataset:", err);
+      toast.error("Failed to delete workflow", { description: err as string });
+    }
+    setDeleteConfirm(null);
+  };
+
+  const handleImportToDataset = async (result: ImportResult) => {
+    try {
+      let targetDatasetId: string;
+      let datasetName: string;
+
+      if (result.target === "new" && result.newDatasetName) {
+        // Create new dataset first
+        const newDataset = await createDataset(result.newDatasetName);
+        targetDatasetId = newDataset.id;
+        datasetName = newDataset.name;
+      } else if (result.target === "existing" && result.existingDatasetId) {
+        // Use existing dataset
+        targetDatasetId = result.existingDatasetId;
+        const existingDataset = datasets.find((d) => d.id === targetDatasetId);
+        datasetName = existingDataset?.name || "dataset";
+
+        // If replace mode, clear existing records first
+        if (result.mode === "replace") {
+          await clearDatasetRecords(targetDatasetId);
+        }
+      } else {
+        throw new Error("Invalid import configuration");
+      }
+
+      // Import the records
+      const count = await importRecords(
+        targetDatasetId,
+        result.records,
+        result.defaultTopic
+      );
+
+      toast.success(
+        result.target === "new"
+          ? `Created "${datasetName}" with ${count} record${count !== 1 ? "s" : ""}`
+          : `Imported ${count} record${count !== 1 ? "s" : ""} to "${datasetName}"`
+      );
+    } catch (err) {
+      console.error("Failed to import data:", err);
+      toast.error("Failed to import data");
+      throw err;
+    }
+  };
+
+  const handleDownloadDataset = async (workflowId: string) => {
+    try {
+      const datasetWithRecords = await getDatasetWithRecords(workflowId);
+      if (!datasetWithRecords) {
+        toast.error("Workflow not found");
+        return;
+      }
+
+      // Export as JSONL format with messages and tools columns
+      const jsonlContent = datasetWithRecords.records
+        .map((record) => {
+          const data = record.data as Record<string, unknown> | undefined;
+          const input = data?.input as Record<string, unknown> | undefined;
+          const output = data?.output as Record<string, unknown> | undefined;
+
+          // Combine input.messages with output (output is a single message)
+          const inputMessages = (input?.messages as unknown[]) || [];
+          const outputMessage = output?.messages
+            ? Array.isArray(output.messages)
+              ? output.messages[0]
+              : output.messages
+            : output;
+          const messages = outputMessage
+            ? [...inputMessages, outputMessage]
+            : inputMessages;
+
+          // Get tools from input.tools
+          const tools = (input?.tools as unknown[]) || [];
+
+          return JSON.stringify({ messages, tools });
+        })
+        .join("\n");
+
+      const blob = new Blob([jsonlContent], { type: "application/jsonl" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${datasetWithRecords.name.toLowerCase().replace(/\s+/g, "-")}-export.jsonl`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(`Exported ${datasetWithRecords.records.length} records as JSONL`);
+    } catch (err) {
+      console.error("Failed to export dataset:", err);
+      toast.error("Failed to export workflow");
+    }
+  };
+
+  return (
+    <>
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Scrollable content area */}
+        <div className="flex-1 overflow-auto">
+          <div className="w-full mx-auto px-6 py-6">
+            <DatasetsListHeader
+              searchQuery={searchQuery}
+              activeFilter={activeFilter}
+              activeSort={activeSort}
+              onSearchChange={setSearchQuery}
+              onFilterChange={setActiveFilter}
+              onSortChange={setActiveSort}
+              totalCount={filteredDatasets.length}
+            />
+
+            {/* Loading state */}
+            {isLoading && (
+              <div className="py-12">
+                <LoadingIndicator variant="section" message="Loading datasets..." />
+              </div>
+            )}
+
+            {/* Error state */}
+            {error && (
+              <div className="flex items-center justify-center py-12">
+                <div className="text-red-500">Error: {error.message}</div>
+              </div>
+            )}
+
+            {/* Empty state */}
+            {!isLoading && !error && datasets.length === 0 && <DatasetsEmptyState />}
+
+            {/* No results state */}
+            {!isLoading && !error && datasets.length > 0 && filteredDatasets.length === 0 && (
+              <DatasetsNoResultsState searchQuery={searchQuery} />
+          )}
+
+            {/* Workflows table */}
+            {!isLoading && !error && filteredDatasets.length > 0 && (
+              <WorkflowsTable
+                rows={filteredDatasets.map((dataset) => {
+                  const stats = topicStats[dataset.id];
+                  return {
+                    dataset,
+                    filterGroup: getFilterGroup(dataset),
+                    recordCount: recordCounts[dataset.id] ?? "...",
+                    topicCount: stats?.topicCount ?? 0,
+                    docsCount: docsCounts[dataset.id] ?? 0,
+                    isEditing: editingDatasetId === dataset.id,
+                    editingName: editingDatasetName,
+                    onSelect: () => onSelectDataset(dataset.id),
+                    onEditNameChange: setEditingDatasetName,
+                    onSaveRename: () => handleRenameDataset(dataset.id),
+                    onCancelRename: () => setEditingDatasetId(null),
+                    onStartRename: () => {
+                      setEditingDatasetId(dataset.id);
+                      setEditingDatasetName(dataset.name);
+                    },
+                    onImport: () => {
+                      setImportTargetDatasetId(dataset.id);
+                      setShowImportDialog(true);
+                    },
+                    onDownload: () => handleDownloadDataset(dataset.id),
+                    onDelete: () => setDeleteConfirm({ type: "dataset", id: dataset.id }),
+                  };
+                })}
+              />
+            )}
+          </div>
+        </div>
+
+      </div>
+
+      {/* Delete confirmation dialog */}
+      <DeleteConfirmationDialog
+        confirmation={deleteConfirm}
+        onOpenChange={() => setDeleteConfirm(null)}
+        onConfirm={(confirmation) => {
+          if (confirmation.type === "dataset") {
+            handleDeleteDataset(confirmation.id);
+          }
+        }}
+      />
+
+      {/* Import data dialog */}
+      <IngestDataDialog
+        open={showImportDialog}
+        onOpenChange={(open) => {
+          setShowImportDialog(open);
+          if (!open) setImportTargetDatasetId(null);
+        }}
+        datasets={datasets}
+        onImportToDataset={handleImportToDataset}
+        preselectedDatasetId={importTargetDatasetId ?? undefined}
+      />
+    </>
+  );
+}

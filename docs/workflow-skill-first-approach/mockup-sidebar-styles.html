@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sidebar Style Comparison</title>
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0a0a0a; color: #d4d4d8; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+
+  .container { display: flex; gap: 24px; padding: 24px; flex-wrap: wrap; }
+  .variant { width: 260px; border: 1px solid #27272a; border-radius: 12px; overflow: hidden; background: #111; }
+  .variant-label { background: #10b981; color: #0a0a0a; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; padding: 6px 12px; text-align: center; }
+
+  .sidebar { height: 720px; overflow-y: auto; font-size: 12px; }
+  .sidebar::-webkit-scrollbar { width: 4px; }
+  .sidebar::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+
+  /* Icon sizing */
+  .sidebar [data-lucide] { width: 14px; height: 14px; stroke-width: 1.8; flex-shrink: 0; }
+
+  /* ─── VARIANT A: Current (baseline) ─── */
+  .v-current .section-header {
+    font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+    color: #71717a; padding: 12px 16px 4px; display: flex; align-items: center; justify-content: space-between;
+  }
+  .v-current .section-header .count { font-size: 9px; color: #52525b; }
+  .v-current .item {
+    display: flex; align-items: center; gap: 8px; padding: 5px 16px 5px 24px;
+    color: #a1a1aa; cursor: pointer; transition: background 0.15s;
+  }
+  .v-current .item:hover { background: rgba(255,255,255,0.03); }
+  .v-current .item.active { background: rgba(16,185,129,0.08); color: #10b981; }
+  .v-current .item .badge { margin-left: auto; font-size: 9px; padding: 1px 6px; border-radius: 8px; background: rgba(16,185,129,0.15); color: #10b981; font-weight: 600; }
+  .v-current .item .count { margin-left: auto; font-size: 10px; color: #52525b; }
+  .v-current .sub-item { padding-left: 40px; }
+
+  /* ─── VARIANT B: Grouped cards ─── */
+  .v-cards .section { margin: 8px 8px 0; border-radius: 8px; border: 1px solid #1e1e1e; overflow: hidden; }
+  .v-cards .section-header {
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+    color: #a1a1aa; padding: 8px 12px; display: flex; align-items: center; gap: 6px;
+    background: #161616; border-bottom: 1px solid #1e1e1e; cursor: pointer;
+  }
+  .v-cards .section-header:hover { background: #1a1a1a; }
+  .v-cards .section-header .count { font-size: 9px; color: #52525b; background: #1e1e1e; padding: 1px 6px; border-radius: 8px; margin-left: auto; }
+  .v-cards .section-header .plus { color: #52525b; cursor: pointer; margin-left: 4px; }
+  .v-cards .section-header .plus:hover { color: #a1a1aa; }
+  .v-cards .item {
+    display: flex; align-items: center; gap: 8px; padding: 5px 12px;
+    color: #a1a1aa; cursor: pointer; transition: background 0.15s; font-size: 11px;
+  }
+  .v-cards .item:hover { background: rgba(255,255,255,0.03); }
+  .v-cards .item.active { background: rgba(16,185,129,0.08); color: #10b981; }
+  .v-cards .item .badge { margin-left: auto; font-size: 9px; padding: 1px 6px; border-radius: 8px; background: rgba(16,185,129,0.15); color: #10b981; font-weight: 600; }
+  .v-cards .item .count { margin-left: auto; font-size: 10px; color: #3f3f46; }
+  .v-cards .sub-item { padding-left: 28px; }
+
+  /* ─── VARIANT C: Color accents ─── */
+  .v-accent .section { margin: 4px 0; }
+  .v-accent .section-header {
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+    padding: 10px 16px 4px; display: flex; align-items: center; gap: 6px; cursor: pointer;
+  }
+  .v-accent .section-header .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .v-accent .section-header .count { font-size: 9px; margin-left: auto; opacity: 0.5; }
+  .v-accent .section-header.sources { color: #06b6d4; } .v-accent .sources .dot { background: #06b6d4; }
+  .v-accent .section-header.data { color: #10b981; } .v-accent .data .dot { background: #10b981; }
+  .v-accent .section-header.evaluator { color: #f59e0b; } .v-accent .evaluator .dot { background: #f59e0b; }
+  .v-accent .section-header.evals { color: #8b5cf6; } .v-accent .evals .dot { background: #8b5cf6; }
+  .v-accent .section-header.training { color: #ef4444; } .v-accent .training .dot { background: #ef4444; }
+  .v-accent .item {
+    display: flex; align-items: center; gap: 8px; padding: 4px 16px 4px 28px;
+    color: #a1a1aa; cursor: pointer; transition: all 0.15s; font-size: 11px;
+  }
+  .v-accent .item:hover { background: rgba(255,255,255,0.03); }
+  .v-accent .item.active { background: rgba(16,185,129,0.06); color: #10b981; border-left: 2px solid #10b981; padding-left: 26px; }
+  .v-accent .item .badge { margin-left: auto; font-size: 9px; padding: 1px 6px; border-radius: 8px; background: rgba(16,185,129,0.15); color: #10b981; font-weight: 600; }
+  .v-accent .item .count { margin-left: auto; font-size: 10px; color: #3f3f46; }
+  .v-accent .sub-item { padding-left: 44px; }
+  .v-accent .separator { height: 1px; background: linear-gradient(to right, transparent, #27272a, transparent); margin: 6px 16px; }
+
+  /* ─── VARIANT D: Compact rounded ─── */
+  .v-compact .section { margin: 2px 0; }
+  .v-compact .section-header {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.02em;
+    color: #d4d4d8; padding: 6px 12px; display: flex; align-items: center; gap: 6px;
+    cursor: pointer; border-radius: 6px; margin: 2px 6px; transition: background 0.15s;
+  }
+  .v-compact .section-header:hover { background: rgba(255,255,255,0.04); }
+  .v-compact .section-header .count { font-size: 9px; color: #52525b; margin-left: auto; }
+  .v-compact .section-header .plus { color: #52525b; margin-left: 4px; opacity: 0; transition: opacity 0.15s; }
+  .v-compact .section-header:hover .plus { opacity: 1; }
+  .v-compact .item {
+    display: flex; align-items: center; gap: 6px; padding: 3px 12px 3px 30px;
+    color: #a1a1aa; cursor: pointer; transition: all 0.15s; font-size: 11px;
+    border-radius: 4px; margin: 1px 6px;
+  }
+  .v-compact .item:hover { background: rgba(255,255,255,0.04); color: #d4d4d8; }
+  .v-compact .item.active { background: rgba(16,185,129,0.1); color: #10b981; }
+  .v-compact .item .badge { margin-left: auto; font-size: 8px; padding: 1px 5px; border-radius: 6px; font-weight: 600; background: rgba(16,185,129,0.15); color: #10b981; }
+  .v-compact .item .count { margin-left: auto; font-size: 10px; color: #3f3f46; }
+  .v-compact .sub-item { padding-left: 42px; }
+  .v-compact .sub-sub-item { padding-left: 54px; }
+  .v-compact .section-divider { height: 1px; background: #1a1a1a; margin: 4px 12px; }
+
+  /* ─── VARIANT E: VS Code style ─── */
+  .v-vscode .section-header {
+    font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+    color: #c9c9c9; padding: 6px 8px; display: flex; align-items: center; gap: 4px;
+    background: #181818; cursor: pointer; border-bottom: 1px solid #1e1e1e;
+    position: sticky; top: 0; z-index: 1;
+  }
+  .v-vscode .section-header .count { font-size: 9px; color: #555; margin-left: auto; }
+  .v-vscode .item {
+    display: flex; align-items: center; gap: 6px; padding: 2px 8px 2px 20px;
+    color: #bcbcbc; cursor: pointer; transition: background 0.1s; font-size: 12px;
+    position: relative;
+  }
+  .v-vscode .item::before { content: ''; position: absolute; left: 12px; top: 0; bottom: 0; width: 1px; background: #2a2a2a; }
+  .v-vscode .item:hover { background: #1e1e1e; }
+  .v-vscode .item.active { background: #10b98115; color: #10b981; }
+  .v-vscode .item .badge { margin-left: auto; font-size: 9px; padding: 0px 5px; border-radius: 4px; font-weight: 500; background: #10b98120; color: #10b981; }
+  .v-vscode .item .count { margin-left: auto; font-size: 10px; color: #444; }
+  .v-vscode .sub-item { padding-left: 32px; }
+  .v-vscode .sub-item::before { left: 24px; }
+  .v-vscode .sub-sub-item { padding-left: 44px; }
+  .v-vscode .sub-sub-item::before { left: 36px; }
+</style>
+</head>
+<body>
+
+<div style="padding: 16px 24px 8px; font-size: 14px; font-weight: 600; color: #a1a1aa;">
+  Sidebar Style Comparison — Pick the one you like
+</div>
+
+<div class="container">
+
+<!-- ═══ VARIANT A: Current ═══ -->
+<div class="variant">
+  <div class="variant-label">A — Current (Baseline)</div>
+  <div class="sidebar v-current">
+    <div class="section-header">Source Documents <span class="count">3</span></div>
+    <div class="item"><i data-lucide="file-text"></i> All Sources <span class="count">3</span></div>
+    <div class="item sub-item"><i data-lucide="file-text"></i> chess-workbook... <span class="count">138</span></div>
+    <div class="item sub-item"><i data-lucide="file-text"></i> chess-tactics-an... <span class="count">197</span></div>
+
+    <div class="section-header">Training Data <span class="count">70</span></div>
+    <div class="item"><i data-lucide="bar-chart-3"></i> All Topics <span class="count">70</span></div>
+    <div class="item"><i data-lucide="chevron-down" style="width:12px;height:12px"></i> Chess Fundamentals <span class="count">15</span></div>
+    <div class="item sub-item"><i data-lucide="hash" style="width:12px;height:12px;opacity:0.4"></i> Board Setup & Notat... <span class="count">5</span></div>
+    <div class="item sub-item"><i data-lucide="hash" style="width:12px;height:12px;opacity:0.4"></i> Piece Movement & V... <span class="count">5</span></div>
+    <div class="item sub-item"><i data-lucide="hash" style="width:12px;height:12px;opacity:0.4"></i> Basic Checkmates <span class="count">5</span></div>
+    <div class="item"><i data-lucide="chevron-down" style="width:12px;height:12px"></i> Tactical Patterns <span class="count">25</span></div>
+    <div class="item sub-item"><i data-lucide="hash" style="width:12px;height:12px;opacity:0.4"></i> Forks & Double Atta... <span class="count">5</span></div>
+    <div class="item sub-item active"><i data-lucide="hash" style="width:12px;height:12px;opacity:0.4"></i> Deflection & Decoy <span class="count">5</span></div>
+    <div class="item sub-item"><i data-lucide="hash" style="width:12px;height:12px;opacity:0.4"></i> Pins & Skewers <span class="count">5</span></div>
+
+    <div class="section-header">Evaluator</div>
+    <div class="item"><i data-lucide="code-2"></i> grader-script.js</div>
+
+    <div class="section-header">Eval Runs <span class="count">5</span></div>
+    <div class="item"><i data-lucide="bar-chart-3"></i> eval-7fa8f0 <span class="badge">done</span></div>
+    <div class="item"><i data-lucide="bar-chart-3"></i> eval-63d455 <span class="badge">done</span></div>
+    <div class="item"><i data-lucide="bar-chart-3"></i> eval-790f4e <span class="badge">done</span></div>
+
+    <div class="section-header">Training Jobs <span class="count">3</span></div>
+    <div class="item"><i data-lucide="brain"></i> ft-5a359a <span class="badge">done</span></div>
+    <div class="item"><i data-lucide="brain"></i> ft-006d17 <span class="badge">done</span></div>
+    <div class="item"><i data-lucide="brain"></i> ft-3601b4 <span class="badge">done</span></div>
+  </div>
+</div>
+
+<!-- ═══ VARIANT B: Grouped Cards ═══ -->
+<div class="variant">
+  <div class="variant-label">B — Grouped Cards</div>
+  <div class="sidebar v-cards">
+    <div class="section">
+      <div class="section-header"><i data-lucide="book-open"></i> Source Documents <span class="count">3</span></div>
+      <div class="item"><i data-lucide="file-text"></i> All Sources <span class="count">3</span></div>
+      <div class="item sub-item"><i data-lucide="file-text"></i> chess-workbook... <span class="count">138</span></div>
+      <div class="item sub-item"><i data-lucide="file-text"></i> chess-tactics-an... <span class="count">197</span></div>
+    </div>
+    <div class="section">
+      <div class="section-header"><i data-lucide="database"></i> Training Data <span class="count">70</span></div>
+      <div class="item"><i data-lucide="bar-chart-3"></i> All Topics <span class="count">70</span></div>
+      <div class="item"><i data-lucide="chevron-down" style="width:12px;height:12px"></i> Chess Fundamentals <span class="count">15</span></div>
+      <div class="item sub-item">Board Setup & Notat... <span class="count">5</span></div>
+      <div class="item sub-item">Piece Movement & V... <span class="count">5</span></div>
+      <div class="item sub-item">Basic Checkmates <span class="count">5</span></div>
+      <div class="item"><i data-lucide="chevron-down" style="width:12px;height:12px"></i> Tactical Patterns <span class="count">25</span></div>
+      <div class="item sub-item">Forks & Double Atta... <span class="count">5</span></div>
+      <div class="item sub-item active">Deflection & Decoy <span class="count">5</span></div>
+      <div class="item sub-item">Pins & Skewers <span class="count">5</span></div>
+    </div>
+    <div class="section">
+      <div class="section-header"><i data-lucide="code-2"></i> Evaluator</div>
+      <div class="item"><i data-lucide="file-code-2"></i> grader-script.js</div>
+    </div>
+    <div class="section">
+      <div class="section-header"><i data-lucide="flask-conical"></i> Eval Runs <span class="count">5</span> <span class="plus"><i data-lucide="plus" style="width:12px;height:12px"></i></span></div>
+      <div class="item"><i data-lucide="bar-chart-3"></i> eval-7fa8f0 <span class="badge">done</span></div>
+      <div class="item"><i data-lucide="bar-chart-3"></i> eval-63d455 <span class="badge">done</span></div>
+      <div class="item"><i data-lucide="bar-chart-3"></i> eval-790f4e <span class="badge">done</span></div>
+    </div>
+    <div class="section">
+      <div class="section-header"><i data-lucide="brain"></i> Training Jobs <span class="count">3</span> <span class="plus"><i data-lucide="plus" style="width:12px;height:12px"></i></span></div>
+      <div class="item"><i data-lucide="brain"></i> ft-5a359a <span class="badge">done</span></div>
+      <div class="item"><i data-lucide="brain"></i> ft-006d17 <span class="badge">done</span></div>
+      <div class="item"><i data-lucide="brain"></i> ft-3601b4 <span class="badge">done</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ VARIANT C: Color Accents ═══ -->
+<div class="variant">
+  <div class="variant-label">C — Color Accents</div>
+  <div class="sidebar v-accent">
+    <div class="section">
+      <div class="section-header sources"><span class="dot"></span><i data-lucide="book-open"></i> Source Documents <span class="count">3</span></div>
+      <div class="item"><i data-lucide="file-text"></i> All Sources <span class="count">3</span></div>
+      <div class="item sub-item"><i data-lucide="file-text"></i> chess-workbook... <span class="count">138</span></div>
+      <div class="item sub-item"><i data-lucide="file-text"></i> chess-tactics-an... <span class="count">197</span></div>
+    </div>
+    <div class="separator"></div>
+    <div class="section">
+      <div class="section-header data"><span class="dot"></span><i data-lucide="database"></i> Training Data <span class="count">70</span></div>
+      <div class="item"><i data-lucide="bar-chart-3"></i> All Topics <span class="count">70</span></div>
+      <div class="item"><i data-lucide="chevron-down" style="width:12px;height:12px"></i> Chess Fundamentals <span class="count">15</span></div>
+      <div class="item sub-item">Board Setup & Notat... <span class="count">5</span></div>
+      <div class="item sub-item">Piece Movement & V... <span class="count">5</span></div>
+      <div class="item sub-item">Basic Checkmates <span class="count">5</span></div>
+      <div class="item"><i data-lucide="chevron-down" style="width:12px;height:12px"></i> Tactical Patterns <span class="count">25</span></div>
+      <div class="item sub-item">Forks & Double Atta... <span class="count">5</span></div>
+      <div class="item sub-item active">Deflection & Decoy <span class="count">5</span></div>
+      <div class="item sub-item">Pins & Skewers <span class="count">5</span></div>
+    </div>
+    <div class="separator"></div>
+    <div class="section">
+      <div class="section-header evaluator"><span class="dot"></span><i data-lucide="code-2"></i> Evaluator</div>
+      <div class="item"><i data-lucide="file-code-2"></i> grader-script.js</div>
+    </div>
+    <div class="separator"></div>
+    <div class="section">
+      <div class="section-header evals"><span class="dot"></span><i data-lucide="flask-conical"></i> Eval Runs <span class="count">5</span></div>
+      <div class="item"><i data-lucide="bar-chart-3"></i> eval-7fa8f0 <span class="badge">done</span></div>
+      <div class="item"><i data-lucide="bar-chart-3"></i> eval-63d455 <span class="badge">done</span></div>
+      <div class="item"><i data-lucide="bar-chart-3"></i> eval-790f4e <span class="badge">done</span></div>
+    </div>
+    <div class="separator"></div>
+    <div class="section">
+      <div class="section-header training"><span class="dot"></span><i data-lucide="brain"></i> Training Jobs <span class="count">3</span></div>
+      <div class="item"><i data-lucide="brain"></i> ft-5a359a <span class="badge">done</span></div>
+      <div class="item"><i data-lucide="brain"></i> ft-006d17 <span class="badge">done</span></div>
+      <div class="item"><i data-lucide="brain"></i> ft-3601b4 <span class="badge">done</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ VARIANT D: Compact Rounded ═══ -->
+<div class="variant">
+  <div class="variant-label">D — Compact Rounded</div>
+  <div class="sidebar v-compact">
+    <div class="section">
+      <div class="section-header">
+        <i data-lucide="chevron-down" style="width:12px;height:12px;color:#52525b"></i>
+        <i data-lucide="book-open"></i> Sources
+        <span class="count">3</span>
+      </div>
+      <div class="item"><i data-lucide="file-text"></i> All Sources <span class="count">3</span></div>
+      <div class="item sub-item"><i data-lucide="file-text"></i> chess-workbook... <span class="count">138</span></div>
+      <div class="item sub-item"><i data-lucide="file-text"></i> chess-tactics-an... <span class="count">197</span></div>
+    </div>
+    <div class="section-divider"></div>
+    <div class="section">
+      <div class="section-header">
+        <i data-lucide="chevron-down" style="width:12px;height:12px;color:#52525b"></i>
+        <i data-lucide="database"></i> Training Data
+        <span class="count">70</span>
+      </div>
+      <div class="item"><i data-lucide="bar-chart-3"></i> All Topics <span class="count">70</span></div>
+      <div class="item sub-item">
+        <i data-lucide="chevron-down" style="width:10px;height:10px;color:#52525b"></i>
+        Chess Fundamentals <span class="count">15</span>
+      </div>
+      <div class="item sub-sub-item"><i data-lucide="hash" style="width:11px;height:11px;opacity:0.3"></i> Board Setup & Notat... <span class="count">5</span></div>
+      <div class="item sub-sub-item"><i data-lucide="hash" style="width:11px;height:11px;opacity:0.3"></i> Piece Movement & V... <span class="count">5</span></div>
+      <div class="item sub-sub-item"><i data-lucide="hash" style="width:11px;height:11px;opacity:0.3"></i> Basic Checkmates <span class="count">5</span></div>
+      <div class="item sub-item">
+        <i data-lucide="chevron-down" style="width:10px;height:10px;color:#52525b"></i>
+        Tactical Patterns <span class="count">25</span>
+      </div>
+      <div class="item sub-sub-item"><i data-lucide="hash" style="width:11px;height:11px;opacity:0.3"></i> Forks & Double Atta... <span class="count">5</span></div>
+      <div class="item sub-sub-item active"><i data-lucide="hash" style="width:11px;height:11px"></i> Deflection & Decoy <span class="count">5</span></div>
+      <div class="item sub-sub-item"><i data-lucide="hash" style="width:11px;height:11px;opacity:0.3"></i> Pins & Skewers <span class="count">5</span></div>
+    </div>
+    <div class="section-divider"></div>
+    <div class="section">
+      <div class="section-header">
+        <i data-lucide="chevron-right" style="width:12px;height:12px;color:#52525b"></i>
+        <i data-lucide="code-2"></i> Evaluator
+      </div>
+      <div class="item"><i data-lucide="file-code-2"></i> grader-script.js</div>
+    </div>
+    <div class="section-divider"></div>
+    <div class="section">
+      <div class="section-header">
+        <i data-lucide="chevron-down" style="width:12px;height:12px;color:#52525b"></i>
+        <i data-lucide="flask-conical"></i> Eval Runs
+        <span class="count">5</span>
+        <span class="plus"><i data-lucide="plus" style="width:12px;height:12px"></i></span>
+      </div>
+      <div class="item"><i data-lucide="bar-chart-3"></i> eval-7fa8f0 <span class="badge">done</span></div>
+      <div class="item"><i data-lucide="bar-chart-3"></i> eval-63d455 <span class="badge">done</span></div>
+      <div class="item"><i data-lucide="bar-chart-3"></i> eval-790f4e <span class="badge">done</span></div>
+    </div>
+    <div class="section-divider"></div>
+    <div class="section">
+      <div class="section-header">
+        <i data-lucide="chevron-down" style="width:12px;height:12px;color:#52525b"></i>
+        <i data-lucide="brain"></i> Training Jobs
+        <span class="count">3</span>
+        <span class="plus"><i data-lucide="plus" style="width:12px;height:12px"></i></span>
+      </div>
+      <div class="item"><i data-lucide="brain"></i> ft-5a359a <span class="badge">done</span></div>
+      <div class="item"><i data-lucide="brain"></i> ft-006d17 <span class="badge">done</span></div>
+      <div class="item"><i data-lucide="brain"></i> ft-3601b4 <span class="badge">done</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ VARIANT E: VS Code Style ═══ -->
+<div class="variant">
+  <div class="variant-label">E — VS Code Style</div>
+  <div class="sidebar v-vscode">
+    <div class="section-header"><i data-lucide="chevron-down" style="width:12px;height:12px"></i> Source Documents <span class="count">3</span></div>
+    <div class="item"><i data-lucide="file-text"></i> All Sources <span class="count">3</span></div>
+    <div class="item sub-item"><i data-lucide="file-text"></i> chess-workbook... <span class="count">138</span></div>
+    <div class="item sub-item"><i data-lucide="file-text"></i> chess-tactics-an... <span class="count">197</span></div>
+
+    <div class="section-header"><i data-lucide="chevron-down" style="width:12px;height:12px"></i> Training Data <span class="count">70</span></div>
+    <div class="item"><i data-lucide="bar-chart-3"></i> All Topics <span class="count">70</span></div>
+    <div class="item sub-item"><i data-lucide="chevron-down" style="width:10px;height:10px"></i> Chess Fundamentals <span class="count">15</span></div>
+    <div class="item sub-sub-item"><i data-lucide="hash" style="width:11px;height:11px;opacity:0.4"></i> Board Setup & Notat... <span class="count">5</span></div>
+    <div class="item sub-sub-item"><i data-lucide="hash" style="width:11px;height:11px;opacity:0.4"></i> Piece Movement & V... <span class="count">5</span></div>
+    <div class="item sub-sub-item"><i data-lucide="hash" style="width:11px;height:11px;opacity:0.4"></i> Basic Checkmates <span class="count">5</span></div>
+    <div class="item sub-item"><i data-lucide="chevron-down" style="width:10px;height:10px"></i> Tactical Patterns <span class="count">25</span></div>
+    <div class="item sub-sub-item"><i data-lucide="hash" style="width:11px;height:11px;opacity:0.4"></i> Forks & Double Atta... <span class="count">5</span></div>
+    <div class="item sub-sub-item active"><i data-lucide="hash" style="width:11px;height:11px"></i> Deflection & Decoy <span class="count">5</span></div>
+    <div class="item sub-sub-item"><i data-lucide="hash" style="width:11px;height:11px;opacity:0.4"></i> Pins & Skewers <span class="count">5</span></div>
+
+    <div class="section-header"><i data-lucide="chevron-down" style="width:12px;height:12px"></i> Evaluator</div>
+    <div class="item"><i data-lucide="file-code-2"></i> grader-script.js</div>
+
+    <div class="section-header"><i data-lucide="chevron-down" style="width:12px;height:12px"></i> Eval Runs <span class="count">5</span></div>
+    <div class="item"><i data-lucide="bar-chart-3"></i> eval-7fa8f0 <span class="badge">done</span></div>
+    <div class="item"><i data-lucide="bar-chart-3"></i> eval-63d455 <span class="badge">done</span></div>
+    <div class="item"><i data-lucide="bar-chart-3"></i> eval-790f4e <span class="badge">done</span></div>
+
+    <div class="section-header"><i data-lucide="chevron-down" style="width:12px;height:12px"></i> Training Jobs <span class="count">3</span></div>
+    <div class="item"><i data-lucide="brain"></i> ft-5a359a <span class="badge">done</span></div>
+    <div class="item"><i data-lucide="brain"></i> ft-006d17 <span class="badge">done</span></div>
+    <div class="item"><i data-lucide="brain"></i> ft-3601b4 <span class="badge">done</span></div>
+  </div>
+</div>
+
+</div>
+
+<div style="padding: 16px 24px 32px; color: #52525b; font-size: 11px; line-height: 1.8;">
+  <strong style="color:#a1a1aa">A — Current:</strong> Flat sections, uppercase headers, no visual grouping.<br>
+  <strong style="color:#a1a1aa">B — Grouped Cards:</strong> Each section in a bordered card. Clear visual separation. Headers have subtle background.<br>
+  <strong style="color:#a1a1aa">C — Color Accents:</strong> Each section has a unique color dot + tinted header. Quick visual scanning by color.<br>
+  <strong style="color:#a1a1aa">D — Compact Rounded:</strong> Rounded items with hover states. Chevrons for collapse. Tighter spacing. + button on hover.<br>
+  <strong style="color:#a1a1aa">E — VS Code Style:</strong> Sticky section headers. Indent guide lines. Dense, familiar IDE pattern.<br>
+</div>
+
+<script>lucide.createIcons();</script>
+</body>
+</html>

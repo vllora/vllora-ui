@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>New Training Job Dialog – Mockup</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0a0a0a; color: #d4d4d8; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+
+  /* ── Backdrop ── */
+  .backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.7); }
+
+  /* ── Dialog ── */
+  .dialog { position: relative; z-index: 10; width: 380px; background: #0f0f0f; border: 1px solid #1e1e1e; border-radius: 12px; padding: 24px; box-shadow: 0 25px 50px rgba(0,0,0,0.5); }
+  .dialog > * + * { margin-top: 16px; }
+
+  /* ── Header ── */
+  .dialog-header { }
+  .dialog-title { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600; color: #e4e4e7; }
+  .dialog-title .icon { color: #52525b; }
+  .dialog-desc { font-size: 12px; color: #71717a; margin-top: 4px; }
+
+  /* ── Eval summary card ── */
+  .eval-card { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; border: 1px solid rgba(16,185,129,0.15); background: rgba(16,185,129,0.04); }
+  .eval-card.stale { border-color: rgba(245,158,11,0.2); background: rgba(245,158,11,0.03); }
+  .eval-icon-box { width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; background: rgba(16,185,129,0.1); flex-shrink: 0; }
+  .eval-icon-box.stale { background: rgba(245,158,11,0.1); }
+  .eval-icon { font-size: 13px; }
+  .eval-info { flex: 1; min-width: 0; }
+  .eval-info-title { font-size: 12px; font-weight: 500; display: flex; align-items: center; gap: 6px; }
+  .eval-info-detail { font-size: 10px; color: #52525b; margin-top: 2px; }
+  .eval-score { font-family: 'SF Mono', monospace; font-size: 16px; font-weight: 700; color: #10b981; flex-shrink: 0; }
+  .eval-score.amber { color: #f59e0b; }
+  .version-badge { display: inline-flex; padding: 1px 5px; border-radius: 3px; font-size: 9px; font-weight: 600; border: 1px solid rgba(113,113,122,0.3); background: rgba(113,113,122,0.15); color: #71717a; }
+  .version-badge.purple { border-color: rgba(168,85,247,0.2); background: rgba(168,85,247,0.1); color: #a78bfa; }
+  .stale-badge { display: inline-flex; padding: 1px 5px; border-radius: 3px; font-size: 9px; font-weight: 600; border: 1px solid rgba(245,158,11,0.2); background: rgba(245,158,11,0.1); color: #f59e0b; }
+
+  /* ── Stale warning ── */
+  .stale-warning { display: flex; align-items: center; gap: 6px; padding: 7px 10px; border-radius: 6px; border: 1px solid rgba(245,158,11,0.1); background: rgba(245,158,11,0.03); font-size: 11px; color: rgba(245,158,11,0.7); }
+  .stale-warning .icon { font-size: 12px; flex-shrink: 0; }
+
+  /* ── Form fields ── */
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .field { }
+  .field-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #52525b; margin-bottom: 5px; }
+  .field-select, .field-input { width: 100%; height: 32px; padding: 0 10px; border-radius: 6px; border: 1px solid rgba(39,39,42,0.5); background: rgba(24,24,27,0.3); color: #d4d4d8; font-size: 12px; font-family: inherit; outline: none; appearance: none; -webkit-appearance: none; }
+  .field-select:focus, .field-input:focus { border-color: rgba(16,185,129,0.4); }
+  .field-select { background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%2352525b' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 28px; cursor: pointer; }
+
+  /* ── Advanced toggle ── */
+  .advanced-toggle { display: flex; align-items: center; gap: 5px; font-size: 11px; color: rgba(113,113,122,0.6); cursor: pointer; background: none; border: none; font-family: inherit; }
+  .advanced-toggle:hover { color: #a1a1aa; }
+  .advanced-toggle .chevron { transition: transform 0.2s; font-size: 9px; }
+  .advanced-toggle.open .chevron { transform: rotate(90deg); }
+
+  .advanced-section { overflow: hidden; transition: max-height 0.3s, opacity 0.2s; }
+  .advanced-section.collapsed { max-height: 0; opacity: 0; }
+  .advanced-section.expanded { max-height: 300px; opacity: 1; }
+
+  .section-label { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(113,113,122,0.4); margin: 12px 0 8px; }
+
+  /* ── Actions ── */
+  .actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+  .btn { padding: 7px 14px; border-radius: 6px; font-size: 12px; font-weight: 500; border: none; cursor: pointer; display: flex; align-items: center; gap: 5px; font-family: inherit; }
+  .btn-ghost { background: none; color: #71717a; }
+  .btn-ghost:hover { color: #a1a1aa; }
+  .btn-primary { background: #10b981; color: #0a0a0a; font-weight: 600; }
+  .btn-primary:hover { background: #34d399; }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* ── State controls ── */
+  .controls { position: fixed; top: 16px; right: 16px; z-index: 100; background: #18181b; border: 1px solid #27272a; border-radius: 8px; padding: 12px; }
+  .controls h3 { font-size: 11px; font-weight: 700; color: #f87171; text-transform: uppercase; margin-bottom: 8px; }
+  .controls label { font-size: 10px; color: #71717a; text-transform: uppercase; margin-bottom: 4px; display: block; }
+  .ctrl-btns { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 8px; }
+  .ctrl-btn { padding: 4px 10px; font-size: 11px; border-radius: 4px; border: 1px solid #27272a; background: #0a0a0a; color: #a1a1aa; cursor: pointer; }
+  .ctrl-btn:hover { border-color: #3f3f46; }
+  .ctrl-btn.active { background: #10b981; color: #0a0a0a; border-color: #10b981; font-weight: 600; }
+  .controls .hint { font-size: 9px; color: #3f3f46; margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<!-- ── Controls ── -->
+<div class="controls" id="controls">
+  <h3>Mockup Controls</h3>
+  <label>Dialog State</label>
+  <div class="ctrl-btns">
+    <button class="ctrl-btn active" onclick="setDialogState('first-run')">First Run</button>
+    <button class="ctrl-btn" onclick="setDialogState('returning')">Returning</button>
+    <button class="ctrl-btn" onclick="setDialogState('grader-changed')">Grader Changed</button>
+  </div>
+  <div class="hint">Adapts context based on eval history</div>
+</div>
+
+<div class="backdrop"></div>
+
+<!-- ── Dialog ── -->
+<div class="dialog" id="dialog">
+
+  <!-- Header -->
+  <div class="dialog-header">
+    <div class="dialog-title">
+      <span class="icon">&#x2728;</span>
+      Start Training
+    </div>
+    <div class="dialog-desc">Fine-tune a model with your evaluated dataset</div>
+  </div>
+
+  <!-- Eval summary card (shows latest eval results) -->
+  <div class="eval-card" id="eval-card">
+    <div class="eval-icon-box" id="eval-icon-box">
+      <span class="eval-icon">&#x1F9EA;</span>
+    </div>
+    <div class="eval-info">
+      <div class="eval-info-title" id="eval-title">
+        Latest Evaluation
+        <span class="version-badge purple" id="eval-version">v1</span>
+      </div>
+      <div class="eval-info-detail" id="eval-detail">150 samples &middot; gpt-4o-mini &middot; 2h ago</div>
+    </div>
+    <div class="eval-score" id="eval-score">0.82</div>
+  </div>
+
+  <!-- Stale warning (hidden by default) -->
+  <div class="stale-warning" id="stale-warning" style="display: none;">
+    <span class="icon">&#x26A0;</span>
+    Grader was modified since the last eval (v1). Consider re-running evaluation before training.
+  </div>
+
+  <!-- Config: Base Model + Epochs -->
+  <div class="form-row">
+    <div class="field">
+      <div class="field-label">Base Model</div>
+      <select class="field-select">
+        <option>Qwen3.5-4B</option>
+        <option>Qwen3.5-7B</option>
+        <option selected>GPT-4o Mini</option>
+        <option>GPT-4o</option>
+        <option>Llama 3.3 8B</option>
+      </select>
+    </div>
+    <div class="field">
+      <div class="field-label">Epochs</div>
+      <input class="field-input" type="number" value="3" min="1" max="10" step="0.5">
+    </div>
+  </div>
+
+  <!-- Advanced toggle -->
+  <button class="advanced-toggle" id="adv-toggle" onclick="toggleAdvanced()">
+    <span style="font-size: 12px;">&#x2699;</span>
+    Advanced settings
+    <span class="chevron">&#x25B6;</span>
+  </button>
+
+  <!-- Advanced section -->
+  <div class="advanced-section collapsed" id="adv-section">
+    <div class="section-label">Training</div>
+    <div class="form-row">
+      <div class="field">
+        <div class="field-label">Learning Rate</div>
+        <input class="field-input" type="number" value="1.8e-5" step="0.00001">
+      </div>
+      <div class="field">
+        <div class="field-label">Batch Size</div>
+        <input class="field-input" type="number" value="4" min="1">
+      </div>
+    </div>
+    <div class="form-row" style="margin-top: 8px;">
+      <div class="field">
+        <div class="field-label">LoRA Rank</div>
+        <input class="field-input" type="number" value="16" min="4">
+      </div>
+      <div class="field"></div>
+    </div>
+
+    <div class="section-label">Inference</div>
+    <div class="form-row">
+      <div class="field">
+        <div class="field-label">Max Tokens</div>
+        <input class="field-input" type="number" value="8192" min="1">
+      </div>
+      <div class="field">
+        <div class="field-label">Temperature</div>
+        <input class="field-input" type="number" value="0.7" min="0" max="2" step="0.1">
+      </div>
+    </div>
+    <div class="form-row" style="margin-top: 8px;">
+      <div class="field">
+        <div class="field-label">Response Candidates</div>
+        <input class="field-input" type="number" value="1" min="1">
+      </div>
+      <div class="field"></div>
+    </div>
+  </div>
+
+  <!-- Eval score comparison (returning state) -->
+  <div id="score-comparison" style="display: none;">
+    <div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 6px; border: 1px solid rgba(16,185,129,0.1); background: rgba(16,185,129,0.03);">
+      <span style="color: #10b981; font-size: 13px;">&#x1F4C8;</span>
+      <span style="flex: 1; font-size: 11px; color: #71717a;">Previous best training score</span>
+      <span style="font-family: monospace; font-size: 14px; font-weight: 700; color: #10b981;">0.84</span>
+      <span style="font-size: 10px; color: rgba(113,113,122,0.4);">&middot; 3d ago</span>
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <div class="actions">
+    <button class="btn btn-ghost">Cancel</button>
+    <button class="btn btn-primary">
+      <span>&#x2728;</span>
+      Start Training &middot; 3 epochs
+    </button>
+  </div>
+</div>
+
+<script>
+function toggleAdvanced() {
+  const toggle = document.getElementById('adv-toggle');
+  const section = document.getElementById('adv-section');
+  const isOpen = section.classList.contains('expanded');
+
+  if (isOpen) {
+    section.classList.remove('expanded');
+    section.classList.add('collapsed');
+    toggle.classList.remove('open');
+  } else {
+    section.classList.remove('collapsed');
+    section.classList.add('expanded');
+    toggle.classList.add('open');
+  }
+}
+
+function setDialogState(state) {
+  document.querySelectorAll('.ctrl-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+
+  const evalCard = document.getElementById('eval-card');
+  const evalIconBox = document.getElementById('eval-icon-box');
+  const evalTitle = document.getElementById('eval-title');
+  const evalDetail = document.getElementById('eval-detail');
+  const evalScore = document.getElementById('eval-score');
+  const evalVersion = document.getElementById('eval-version');
+  const staleWarning = document.getElementById('stale-warning');
+  const scoreComparison = document.getElementById('score-comparison');
+
+  // Reset
+  evalCard.className = 'eval-card';
+  evalIconBox.className = 'eval-icon-box';
+  evalScore.className = 'eval-score';
+  staleWarning.style.display = 'none';
+  scoreComparison.style.display = 'none';
+
+  if (state === 'first-run') {
+    evalTitle.innerHTML = 'Latest Evaluation <span class="version-badge purple">v1</span>';
+    evalDetail.textContent = '150 samples \u00B7 gpt-4o-mini \u00B7 2h ago';
+    evalScore.textContent = '0.82';
+    evalVersion.className = 'version-badge purple';
+  }
+  else if (state === 'returning') {
+    evalTitle.innerHTML = 'Latest Evaluation <span class="version-badge purple">v2</span>';
+    evalDetail.textContent = '150 samples \u00B7 gpt-4o-mini \u00B7 1h ago';
+    evalScore.textContent = '0.86';
+    scoreComparison.style.display = 'block';
+  }
+  else if (state === 'grader-changed') {
+    evalCard.classList.add('stale');
+    evalIconBox.classList.add('stale');
+    evalScore.classList.add('amber');
+    evalTitle.innerHTML = 'Latest Evaluation <span class="version-badge">v1</span> <span class="stale-badge">stale</span>';
+    evalDetail.textContent = '150 samples \u00B7 gpt-4o-mini \u00B7 5h ago';
+    evalScore.textContent = '0.82';
+    staleWarning.style.display = 'flex';
+  }
+}
+</script>
+</body>
+</html>

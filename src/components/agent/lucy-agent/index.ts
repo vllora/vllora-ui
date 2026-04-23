@@ -4,8 +4,13 @@
  * Custom chat interface components for the Lucy AI assistant.
  */
 
+// Initialize Lucy-themed styles for distri components
+import { initializeLucyAskFollowUpStyles } from './lucy-ask-follow-up-styles';
+initializeLucyAskFollowUpStyles();
+
 // Core chat components
 export * from './LucyAvatar';
+export * from './UserAvatar';
 export * from './LucyChat';
 export * from './LucyChatInput';
 export * from './LucyWelcome';
@@ -14,9 +19,9 @@ export * from './LucyProviderCheck';
 
 // Message rendering components
 export * from './LucyMessage';
-export * from './LucyMessageRenderer';
-export * from './LucyUserMessage';
-export * from './LucyAssistantMessage';
+export * from './messages/LucyMessageRenderer';
+export * from './messages/LucyUserMessage';
+export * from './messages/LucyAssistantMessage';
 export * from './LucyTextRenderer';
 export * from './LucyImageRenderer';
 export * from './LucyStepIndicator';
@@ -24,8 +29,11 @@ export * from './LucyStepIndicator';
 // Tool components
 export * from './LucyToolCalls';
 export * from './LucyToolRenderer';
+export * from './plan-render/LucyPlanRenderer';
+export * from './plan-render/LucySavePlanRenderer';
 export * from './LucyToolCallCard';
 export * from './LucyToolExecutionRenderer';
+export * from './LucyToolActions';
 
 // Streaming and pending components
 export * from './LucyPendingMessage';

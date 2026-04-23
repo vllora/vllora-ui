@@ -46,16 +46,6 @@ function formatTimestamp(timestamp?: string | number): string {
   return date.toLocaleDateString();
 }
 
-function getUserInitials(name?: string): string {
-  if (!name) return 'U';
-  return name
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
-}
-
 function extractTextContent(message: DistriChatMessage): { text: string; timestamp?: string | number } {
   if (isDistriMessage(message)) {
     const msg = message as DistriMessage;
@@ -70,30 +60,6 @@ function extractTextContent(message: DistriChatMessage): { text: string; timesta
     };
   }
   return { text: '', timestamp: undefined };
-}
-
-// ============================================================================
-// User Avatar
-// ============================================================================
-
-interface UserAvatarProps {
-  name?: string;
-  className?: string;
-}
-
-function UserAvatar({ name, className }: UserAvatarProps) {
-  const initials = getUserInitials(name);
-
-  return (
-    <div
-      className={cn(
-        'w-6 h-6 rounded-full bg-purple-600 flex items-center justify-center text-white text-xs font-medium',
-        className
-      )}
-    >
-      {initials}
-    </div>
-  );
 }
 
 // ============================================================================
@@ -124,20 +90,15 @@ export function LucyMessage({ message, className }: LucyMessageProps) {
 
   if (isUser) {
     return (
-      <div className={cn('flex flex-col items-end gap-1', className)}>
-        {/* Header: timestamp + avatar */}
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span>You</span>
-          <span>•</span>
-          <span>{timeLabel}</span>
-          <UserAvatar name="User" />
-        </div>
+      <div className={cn('flex flex-col items-start gap-1', className)}>
+        {/* Header — left-aligned, no avatar */}
+        <span className="text-xs font-medium text-muted-foreground">
+          You • {timeLabel}
+        </span>
 
-        {/* Message bubble */}
-        <div className="max-w-[85%] bg-purple-900/30 border border-purple-800/30 rounded-2xl rounded-tr-sm px-4 py-3">
-          <div className="text-sm text-foreground whitespace-pre-wrap">
-            {text}
-          </div>
+        {/* Message content — no bubble */}
+        <div className="text-sm text-foreground whitespace-pre-wrap overflow-hidden">
+          {text}
         </div>
       </div>
     );
@@ -146,16 +107,16 @@ export function LucyMessage({ message, className }: LucyMessageProps) {
   // Assistant message
   return (
     <div className={cn('flex flex-col items-start gap-1', className)}>
-      {/* Header: avatar + name + timestamp */}
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <LucyAvatar size="sm" />
-        <span className="font-medium text-foreground">Lucy</span>
-        <span>•</span>
-        <span>{timeLabel}</span>
+      {/* Header: tiny avatar + name + timestamp */}
+      <div className="flex items-center gap-1.5">
+        <LucyAvatar size="xs" />
+        <span className="text-xs font-medium text-muted-foreground">
+          Lucy • {timeLabel}
+        </span>
       </div>
 
-      {/* Message bubble */}
-      <div className="max-w-[85%] bg-muted/50 border border-border rounded-2xl rounded-tl-sm px-4 py-3 ml-8">
+      {/* Message content — no bubble */}
+      <div className="max-w-[100%] overflow-hidden">
         <div className="prose prose-sm prose-invert max-w-none text-sm">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>
             {text}

@@ -1,0 +1,5323 @@
+{
+  "name": "Sample Dataset Export",
+  "records": [
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": "What is 2 + 2?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "2 + 2 equals 4."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "math",
+      "evaluation": {
+        "score": 3,
+        "feedback": "Clear explanation",
+        "evaluatedAt": 1767414932466
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a coding assistant."
+            },
+            {
+              "role": "user",
+              "content": "What is the square root of 144?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "The square root of 144 is 12."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "math",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Clear explanation",
+        "evaluatedAt": 1766839948189
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a creative writing assistant."
+            },
+            {
+              "role": "user",
+              "content": "Solve for x: 2x + 5 = 15"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "x = 5. Subtracting 5 from both sides gives 2x = 10, then dividing by 2 gives x = 5."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "math",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Accurate and helpful",
+        "evaluatedAt": 1766223972719
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an educational tutor."
+            },
+            {
+              "role": "user",
+              "content": "What is 15% of 200?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "15% of 200 is 30."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "math",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Well structured",
+        "evaluatedAt": 1766151158041
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a friendly conversationalist."
+            },
+            {
+              "role": "user",
+              "content": "What is the derivative of x^2?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "The derivative of x^2 is 2x."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "math"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "What is the capital of France?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "The capital of France is Paris."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "geography"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": "What is the largest ocean?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "The Pacific Ocean is the largest ocean on Earth."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "geography",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Comprehensive answer",
+        "evaluatedAt": 1768221595480
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a coding assistant."
+            },
+            {
+              "role": "user",
+              "content": "Name three countries in South America."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Brazil, Argentina, and Colombia are three countries in South America."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "geography",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Accurate and helpful",
+        "evaluatedAt": 1768104994349
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a creative writing assistant."
+            },
+            {
+              "role": "user",
+              "content": "What is the longest river in the world?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "The Nile River is traditionally considered the longest river in the world at about 6,650 km."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "geography",
+      "evaluation": {
+        "score": 3,
+        "feedback": "Clear explanation",
+        "evaluatedAt": 1766843728004
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an educational tutor."
+            },
+            {
+              "role": "user",
+              "content": "What continent is Egypt in?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Egypt is located in Africa, though the Sinai Peninsula is in Asia."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "geography",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Good response",
+        "evaluatedAt": 1765968013883
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a friendly conversationalist."
+            },
+            {
+              "role": "user",
+              "content": "Explain quantum computing in simple terms."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Quantum computing uses quantum bits (qubits) that can be both 0 and 1 at the same time, unlike regular bits."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "science",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Accurate and helpful",
+        "evaluatedAt": 1766245532809
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "What is photosynthesis?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Photosynthesis is the process by which plants convert sunlight, water, and carbon dioxide into glucose and oxygen."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "science",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Well structured",
+        "evaluatedAt": 1766841320334
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": "What is the speed of light?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "The speed of light in a vacuum is approximately 299,792,458 meters per second."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "science",
+      "evaluation": {
+        "score": 3,
+        "feedback": "Clear explanation",
+        "evaluatedAt": 1766350692260
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a coding assistant."
+            },
+            {
+              "role": "user",
+              "content": "What causes seasons on Earth?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Seasons are caused by the tilt of Earth's axis (about 23.5 degrees) as it orbits the Sun."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "science",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Clear explanation",
+        "evaluatedAt": 1767122289096
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a creative writing assistant."
+            },
+            {
+              "role": "user",
+              "content": "What is DNA?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "DNA is the molecule that carries genetic instructions for all known living organisms."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "science",
+      "evaluation": {
+        "score": 3,
+        "feedback": "Clear explanation",
+        "evaluatedAt": 1766918624244
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an educational tutor."
+            },
+            {
+              "role": "user",
+              "content": "Write a function to reverse a string in Python."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "def reverse_string(s): return s[::-1]"
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "coding"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a friendly conversationalist."
+            },
+            {
+              "role": "user",
+              "content": "How do I create a list in JavaScript?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Use square brackets: const myList = [1, 2, 3];"
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "coding",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Well structured",
+        "evaluatedAt": 1767393880126
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "What is a closure in programming?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "A closure is a function that has access to variables from its outer scope."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "coding",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Accurate and helpful",
+        "evaluatedAt": 1767331784668
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": "Explain == vs === in JavaScript."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "== performs type coercion, === checks both value and type without coercion."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "coding",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Comprehensive answer",
+        "evaluatedAt": 1766290330658
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a coding assistant."
+            },
+            {
+              "role": "user",
+              "content": "What is recursion?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Recursion is when a function calls itself to solve a problem by breaking it down."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "coding"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a creative writing assistant."
+            },
+            {
+              "role": "user",
+              "content": "Who invented the telephone?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Alexander Graham Bell invented the telephone in 1876."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "history"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an educational tutor."
+            },
+            {
+              "role": "user",
+              "content": "When did World War II end?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "World War II ended in 1945."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "history",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Good response",
+        "evaluatedAt": 1766430568311
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a friendly conversationalist."
+            },
+            {
+              "role": "user",
+              "content": "Who was the first US president?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "George Washington was the first president, serving from 1789 to 1797."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "history",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Good response",
+        "evaluatedAt": 1766052530643
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "What was the Renaissance?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "The Renaissance was a cultural movement that began in Italy in the 14th century."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "history",
+      "evaluation": {
+        "score": 3,
+        "feedback": "Clear explanation",
+        "evaluatedAt": 1767277270896
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": "When was the Great Wall built?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "The Great Wall was built over many centuries, starting as early as the 7th century BC."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "history"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a coding assistant."
+            },
+            {
+              "role": "user",
+              "content": "What are the benefits of exercise?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Exercise improves cardiovascular health, boosts mood, and promotes better sleep."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "health",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Well structured",
+        "evaluatedAt": 1765994373713
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a creative writing assistant."
+            },
+            {
+              "role": "user",
+              "content": "How much water should I drink daily?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "About 8 glasses (64 ounces) of water per day is generally recommended."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "health"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an educational tutor."
+            },
+            {
+              "role": "user",
+              "content": "What foods are high in protein?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Chicken, fish, eggs, legumes, tofu, Greek yogurt, and nuts are high in protein."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "health"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a friendly conversationalist."
+            },
+            {
+              "role": "user",
+              "content": "How many hours of sleep do adults need?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Most adults need 7-9 hours of sleep per night."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "health"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "What are symptoms of dehydration?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Thirst, dry mouth, dark urine, fatigue, dizziness, and headache."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "health"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": "Write a haiku about programming."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Code flows like water\nBugs hide in the shadows deep\nDebug brings the light"
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "creative"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a coding assistant."
+            },
+            {
+              "role": "user",
+              "content": "Write a short poem about the ocean."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Waves crash upon the shore,\nEndless blue forevermore."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "creative"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a creative writing assistant."
+            },
+            {
+              "role": "user",
+              "content": "Create a limerick about a cat."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "There once was a cat named Lou,\nWho only ate fish that was new."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "creative",
+      "evaluation": {
+        "score": 3,
+        "feedback": "Good response",
+        "evaluatedAt": 1765854317723
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an educational tutor."
+            },
+            {
+              "role": "user",
+              "content": "Write a metaphor about life."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Life is a river, constantly flowing forward toward the sea."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "creative"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a friendly conversationalist."
+            },
+            {
+              "role": "user",
+              "content": "Describe a sunset in one sentence."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "The sun melts into the horizon, painting the sky orange and purple."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "creative"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "Tell me a joke."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Why don't scientists trust atoms? Because they make up everything!"
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "humor"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": "Tell me a programming joke."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Why do programmers prefer dark mode? Because light attracts bugs!"
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "humor",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Well structured",
+        "evaluatedAt": 1767086159596
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a coding assistant."
+            },
+            {
+              "role": "user",
+              "content": "What's a good dad joke?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "I'm reading a book about anti-gravity. It's impossible to put down!"
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "humor",
+      "evaluation": {
+        "score": 3,
+        "feedback": "Well structured",
+        "evaluatedAt": 1767610592633
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a creative writing assistant."
+            },
+            {
+              "role": "user",
+              "content": "Tell me a math joke."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Why was the math book sad? Because it had too many problems."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "humor"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an educational tutor."
+            },
+            {
+              "role": "user",
+              "content": "Got any jokes about computers?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Why did the computer go to the doctor? Because it had a virus!"
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "humor"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a friendly conversationalist."
+            },
+            {
+              "role": "user",
+              "content": "What is machine learning?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Machine learning is AI where computers learn from data without explicit programming."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "technology",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Accurate and helpful",
+        "evaluatedAt": 1766621083873
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "What is cloud computing?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Cloud computing delivers computing services over the internet."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "technology"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": "What is an API?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "An API is a set of protocols that allows software applications to communicate."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "technology",
+      "evaluation": {
+        "score": 3,
+        "feedback": "Clear explanation",
+        "evaluatedAt": 1768151871195
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a coding assistant."
+            },
+            {
+              "role": "user",
+              "content": "What is blockchain?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Blockchain is a distributed ledger technology that records transactions."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "technology"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a creative writing assistant."
+            },
+            {
+              "role": "user",
+              "content": "What is 5G?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "5G is the fifth generation of mobile network technology with faster speeds."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "technology"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an educational tutor."
+            },
+            {
+              "role": "user",
+              "content": "How do I make coffee?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Add water and coffee to your maker, start brewing, then pour and enjoy!"
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "general",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Comprehensive answer",
+        "evaluatedAt": 1768025780874
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a friendly conversationalist."
+            },
+            {
+              "role": "user",
+              "content": "How do I tie a tie?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Cross the wide end over, bring underneath, then over, and pull through the loop."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "general",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Comprehensive answer",
+        "evaluatedAt": 1767493749974
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "What's a good way to start the day?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Wake consistently, hydrate, stretch, eat breakfast, and set intentions."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "general"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": "How do I cook pasta?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Boil salted water, add pasta, cook per directions, drain, and add sauce."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "general",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Comprehensive answer",
+        "evaluatedAt": 1766526297676
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a coding assistant."
+            },
+            {
+              "role": "user",
+              "content": "What should I pack for a trip?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Clothes, toiletries, medications, phone charger, and travel documents."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "general",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Well structured",
+        "evaluatedAt": 1767684144274
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a creative writing assistant."
+            },
+            {
+              "role": "user",
+              "content": "What is 2 + 2?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "2 + 2 equals 4."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "math"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an educational tutor."
+            },
+            {
+              "role": "user",
+              "content": "What is the square root of 144?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "The square root of 144 is 12."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "math",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Clear explanation",
+        "evaluatedAt": 1766092948965
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a friendly conversationalist."
+            },
+            {
+              "role": "user",
+              "content": "Solve for x: 2x + 5 = 15"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "x = 5. Subtracting 5 from both sides gives 2x = 10, then dividing by 2 gives x = 5."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "math",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Accurate and helpful",
+        "evaluatedAt": 1766694021136
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "What is 15% of 200?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "15% of 200 is 30."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "math"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": "What is the derivative of x^2?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "The derivative of x^2 is 2x."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "math"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a coding assistant."
+            },
+            {
+              "role": "user",
+              "content": "What is the capital of France?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "The capital of France is Paris."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "geography",
+      "evaluation": {
+        "score": 3,
+        "feedback": "Good response",
+        "evaluatedAt": 1766206628557
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a creative writing assistant."
+            },
+            {
+              "role": "user",
+              "content": "What is the largest ocean?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "The Pacific Ocean is the largest ocean on Earth."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "geography",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Accurate and helpful",
+        "evaluatedAt": 1767638145649
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an educational tutor."
+            },
+            {
+              "role": "user",
+              "content": "Name three countries in South America."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Brazil, Argentina, and Colombia are three countries in South America."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "geography",
+      "evaluation": {
+        "score": 3,
+        "feedback": "Well structured",
+        "evaluatedAt": 1767060335987
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a friendly conversationalist."
+            },
+            {
+              "role": "user",
+              "content": "What is the longest river in the world?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "The Nile River is traditionally considered the longest river in the world at about 6,650 km."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "geography"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "What continent is Egypt in?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Egypt is located in Africa, though the Sinai Peninsula is in Asia."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "geography",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Clear explanation",
+        "evaluatedAt": 1766344046988
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": "Explain quantum computing in simple terms."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Quantum computing uses quantum bits (qubits) that can be both 0 and 1 at the same time, unlike regular bits."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "science",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Accurate and helpful",
+        "evaluatedAt": 1766242455971
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a coding assistant."
+            },
+            {
+              "role": "user",
+              "content": "What is photosynthesis?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Photosynthesis is the process by which plants convert sunlight, water, and carbon dioxide into glucose and oxygen."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "science",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Comprehensive answer",
+        "evaluatedAt": 1768231465923
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a creative writing assistant."
+            },
+            {
+              "role": "user",
+              "content": "What is the speed of light?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "The speed of light in a vacuum is approximately 299,792,458 meters per second."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "science",
+      "evaluation": {
+        "score": 3,
+        "feedback": "Clear explanation",
+        "evaluatedAt": 1765717235109
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an educational tutor."
+            },
+            {
+              "role": "user",
+              "content": "What causes seasons on Earth?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Seasons are caused by the tilt of Earth's axis (about 23.5 degrees) as it orbits the Sun."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "science"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a friendly conversationalist."
+            },
+            {
+              "role": "user",
+              "content": "What is DNA?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "DNA is the molecule that carries genetic instructions for all known living organisms."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "science"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "Write a function to reverse a string in Python."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "def reverse_string(s): return s[::-1]"
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "coding",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Comprehensive answer",
+        "evaluatedAt": 1766687210734
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": "How do I create a list in JavaScript?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Use square brackets: const myList = [1, 2, 3];"
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "coding"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a coding assistant."
+            },
+            {
+              "role": "user",
+              "content": "What is a closure in programming?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "A closure is a function that has access to variables from its outer scope."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "coding",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Well structured",
+        "evaluatedAt": 1765879217854
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a creative writing assistant."
+            },
+            {
+              "role": "user",
+              "content": "Explain == vs === in JavaScript."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "== performs type coercion, === checks both value and type without coercion."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "coding",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Good response",
+        "evaluatedAt": 1768130065618
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an educational tutor."
+            },
+            {
+              "role": "user",
+              "content": "What is recursion?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Recursion is when a function calls itself to solve a problem by breaking it down."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "coding",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Clear explanation",
+        "evaluatedAt": 1766171331592
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a friendly conversationalist."
+            },
+            {
+              "role": "user",
+              "content": "Who invented the telephone?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Alexander Graham Bell invented the telephone in 1876."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "history"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "When did World War II end?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "World War II ended in 1945."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "history",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Comprehensive answer",
+        "evaluatedAt": 1765824440880
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": "Who was the first US president?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "George Washington was the first president, serving from 1789 to 1797."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "history"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a coding assistant."
+            },
+            {
+              "role": "user",
+              "content": "What was the Renaissance?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "The Renaissance was a cultural movement that began in Italy in the 14th century."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "history",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Accurate and helpful",
+        "evaluatedAt": 1768209353059
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a creative writing assistant."
+            },
+            {
+              "role": "user",
+              "content": "When was the Great Wall built?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "The Great Wall was built over many centuries, starting as early as the 7th century BC."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "history",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Well structured",
+        "evaluatedAt": 1766992913659
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an educational tutor."
+            },
+            {
+              "role": "user",
+              "content": "What are the benefits of exercise?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Exercise improves cardiovascular health, boosts mood, and promotes better sleep."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "health",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Clear explanation",
+        "evaluatedAt": 1766461104555
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a friendly conversationalist."
+            },
+            {
+              "role": "user",
+              "content": "How much water should I drink daily?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "About 8 glasses (64 ounces) of water per day is generally recommended."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "health",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Clear explanation",
+        "evaluatedAt": 1767878334875
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "What foods are high in protein?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Chicken, fish, eggs, legumes, tofu, Greek yogurt, and nuts are high in protein."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "health"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": "How many hours of sleep do adults need?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Most adults need 7-9 hours of sleep per night."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "health"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a coding assistant."
+            },
+            {
+              "role": "user",
+              "content": "What are symptoms of dehydration?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Thirst, dry mouth, dark urine, fatigue, dizziness, and headache."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "health"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a creative writing assistant."
+            },
+            {
+              "role": "user",
+              "content": "Write a haiku about programming."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Code flows like water\nBugs hide in the shadows deep\nDebug brings the light"
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "creative",
+      "evaluation": {
+        "score": 3,
+        "feedback": "Clear explanation",
+        "evaluatedAt": 1766396929045
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an educational tutor."
+            },
+            {
+              "role": "user",
+              "content": "Write a short poem about the ocean."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Waves crash upon the shore,\nEndless blue forevermore."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "creative",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Clear explanation",
+        "evaluatedAt": 1765845696858
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a friendly conversationalist."
+            },
+            {
+              "role": "user",
+              "content": "Create a limerick about a cat."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "There once was a cat named Lou,\nWho only ate fish that was new."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "creative",
+      "evaluation": {
+        "score": 3,
+        "feedback": "Well structured",
+        "evaluatedAt": 1768124718844
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "Write a metaphor about life."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Life is a river, constantly flowing forward toward the sea."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "creative",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Well structured",
+        "evaluatedAt": 1766702476716
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": "Describe a sunset in one sentence."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "The sun melts into the horizon, painting the sky orange and purple."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "creative",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Accurate and helpful",
+        "evaluatedAt": 1767486669892
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a coding assistant."
+            },
+            {
+              "role": "user",
+              "content": "Tell me a joke."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Why don't scientists trust atoms? Because they make up everything!"
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "humor",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Clear explanation",
+        "evaluatedAt": 1767104530606
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a creative writing assistant."
+            },
+            {
+              "role": "user",
+              "content": "Tell me a programming joke."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Why do programmers prefer dark mode? Because light attracts bugs!"
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "humor",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Good response",
+        "evaluatedAt": 1766246296389
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an educational tutor."
+            },
+            {
+              "role": "user",
+              "content": "What's a good dad joke?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "I'm reading a book about anti-gravity. It's impossible to put down!"
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "humor",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Good response",
+        "evaluatedAt": 1766009103256
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a friendly conversationalist."
+            },
+            {
+              "role": "user",
+              "content": "Tell me a math joke."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Why was the math book sad? Because it had too many problems."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "humor",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Comprehensive answer",
+        "evaluatedAt": 1766032654489
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "Got any jokes about computers?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Why did the computer go to the doctor? Because it had a virus!"
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "humor",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Comprehensive answer",
+        "evaluatedAt": 1766633160563
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": "What is machine learning?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Machine learning is AI where computers learn from data without explicit programming."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "technology",
+      "evaluation": {
+        "score": 3,
+        "feedback": "Well structured",
+        "evaluatedAt": 1766812422584
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a coding assistant."
+            },
+            {
+              "role": "user",
+              "content": "What is cloud computing?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Cloud computing delivers computing services over the internet."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "technology"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a creative writing assistant."
+            },
+            {
+              "role": "user",
+              "content": "What is an API?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "An API is a set of protocols that allows software applications to communicate."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "technology",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Clear explanation",
+        "evaluatedAt": 1767227111531
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an educational tutor."
+            },
+            {
+              "role": "user",
+              "content": "What is blockchain?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Blockchain is a distributed ledger technology that records transactions."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "technology"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a friendly conversationalist."
+            },
+            {
+              "role": "user",
+              "content": "What is 5G?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "5G is the fifth generation of mobile network technology with faster speeds."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "technology",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Good response",
+        "evaluatedAt": 1766135033388
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "How do I make coffee?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Add water and coffee to your maker, start brewing, then pour and enjoy!"
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "general"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": "How do I tie a tie?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Cross the wide end over, bring underneath, then over, and pull through the loop."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "general",
+      "evaluation": {
+        "score": 3,
+        "feedback": "Good response",
+        "evaluatedAt": 1765728925654
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a coding assistant."
+            },
+            {
+              "role": "user",
+              "content": "What's a good way to start the day?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Wake consistently, hydrate, stretch, eat breakfast, and set intentions."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "general"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a creative writing assistant."
+            },
+            {
+              "role": "user",
+              "content": "How do I cook pasta?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Boil salted water, add pasta, cook per directions, drain, and add sauce."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "general",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Well structured",
+        "evaluatedAt": 1767728449633
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an educational tutor."
+            },
+            {
+              "role": "user",
+              "content": "What should I pack for a trip?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Clothes, toiletries, medications, phone charger, and travel documents."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "general",
+      "evaluation": {
+        "score": 3,
+        "feedback": "Well structured",
+        "evaluatedAt": 1768081078945
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a friendly conversationalist."
+            },
+            {
+              "role": "user",
+              "content": "What is 2 + 2?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "2 + 2 equals 4."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "math",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Good response",
+        "evaluatedAt": 1766793800112
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "What is the square root of 144?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "The square root of 144 is 12."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "math"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": "Solve for x: 2x + 5 = 15"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "x = 5. Subtracting 5 from both sides gives 2x = 10, then dividing by 2 gives x = 5."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "math",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Good response",
+        "evaluatedAt": 1765712830429
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a coding assistant."
+            },
+            {
+              "role": "user",
+              "content": "What is 15% of 200?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "15% of 200 is 30."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "math"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a creative writing assistant."
+            },
+            {
+              "role": "user",
+              "content": "What is the derivative of x^2?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "The derivative of x^2 is 2x."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "math"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an educational tutor."
+            },
+            {
+              "role": "user",
+              "content": "What is the capital of France?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "The capital of France is Paris."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "geography",
+      "evaluation": {
+        "score": 3,
+        "feedback": "Good response",
+        "evaluatedAt": 1766149012647
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a friendly conversationalist."
+            },
+            {
+              "role": "user",
+              "content": "What is the largest ocean?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "The Pacific Ocean is the largest ocean on Earth."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "geography",
+      "evaluation": {
+        "score": 3,
+        "feedback": "Good response",
+        "evaluatedAt": 1767965363269
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "Name three countries in South America."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Brazil, Argentina, and Colombia are three countries in South America."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "geography"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": "What is the longest river in the world?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "The Nile River is traditionally considered the longest river in the world at about 6,650 km."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "geography"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a coding assistant."
+            },
+            {
+              "role": "user",
+              "content": "What continent is Egypt in?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Egypt is located in Africa, though the Sinai Peninsula is in Asia."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "geography"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a creative writing assistant."
+            },
+            {
+              "role": "user",
+              "content": "Explain quantum computing in simple terms."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Quantum computing uses quantum bits (qubits) that can be both 0 and 1 at the same time, unlike regular bits."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "science"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an educational tutor."
+            },
+            {
+              "role": "user",
+              "content": "What is photosynthesis?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Photosynthesis is the process by which plants convert sunlight, water, and carbon dioxide into glucose and oxygen."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "science",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Clear explanation",
+        "evaluatedAt": 1766694740554
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a friendly conversationalist."
+            },
+            {
+              "role": "user",
+              "content": "What is the speed of light?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "The speed of light in a vacuum is approximately 299,792,458 meters per second."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "science",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Good response",
+        "evaluatedAt": 1767744387177
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "What causes seasons on Earth?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Seasons are caused by the tilt of Earth's axis (about 23.5 degrees) as it orbits the Sun."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "science",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Well structured",
+        "evaluatedAt": 1766364877484
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": "What is DNA?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "DNA is the molecule that carries genetic instructions for all known living organisms."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "science",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Comprehensive answer",
+        "evaluatedAt": 1765796091220
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a coding assistant."
+            },
+            {
+              "role": "user",
+              "content": "Write a function to reverse a string in Python."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "def reverse_string(s): return s[::-1]"
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "coding"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a creative writing assistant."
+            },
+            {
+              "role": "user",
+              "content": "How do I create a list in JavaScript?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Use square brackets: const myList = [1, 2, 3];"
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "coding",
+      "evaluation": {
+        "score": 3,
+        "feedback": "Accurate and helpful",
+        "evaluatedAt": 1767224504659
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an educational tutor."
+            },
+            {
+              "role": "user",
+              "content": "What is a closure in programming?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "A closure is a function that has access to variables from its outer scope."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "coding"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a friendly conversationalist."
+            },
+            {
+              "role": "user",
+              "content": "Explain == vs === in JavaScript."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "== performs type coercion, === checks both value and type without coercion."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "coding"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "What is recursion?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Recursion is when a function calls itself to solve a problem by breaking it down."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "coding"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": "Who invented the telephone?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Alexander Graham Bell invented the telephone in 1876."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "history"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a coding assistant."
+            },
+            {
+              "role": "user",
+              "content": "When did World War II end?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "World War II ended in 1945."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "history",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Comprehensive answer",
+        "evaluatedAt": 1766490649513
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a creative writing assistant."
+            },
+            {
+              "role": "user",
+              "content": "Who was the first US president?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "George Washington was the first president, serving from 1789 to 1797."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "history",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Accurate and helpful",
+        "evaluatedAt": 1766884703142
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an educational tutor."
+            },
+            {
+              "role": "user",
+              "content": "What was the Renaissance?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "The Renaissance was a cultural movement that began in Italy in the 14th century."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "history",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Well structured",
+        "evaluatedAt": 1767834697683
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a friendly conversationalist."
+            },
+            {
+              "role": "user",
+              "content": "When was the Great Wall built?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "The Great Wall was built over many centuries, starting as early as the 7th century BC."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "history",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Clear explanation",
+        "evaluatedAt": 1765922365116
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "What are the benefits of exercise?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Exercise improves cardiovascular health, boosts mood, and promotes better sleep."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "health",
+      "evaluation": {
+        "score": 3,
+        "feedback": "Well structured",
+        "evaluatedAt": 1766232141774
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": "How much water should I drink daily?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "About 8 glasses (64 ounces) of water per day is generally recommended."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "health"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a coding assistant."
+            },
+            {
+              "role": "user",
+              "content": "What foods are high in protein?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Chicken, fish, eggs, legumes, tofu, Greek yogurt, and nuts are high in protein."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "health",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Well structured",
+        "evaluatedAt": 1767873501948
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a creative writing assistant."
+            },
+            {
+              "role": "user",
+              "content": "How many hours of sleep do adults need?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Most adults need 7-9 hours of sleep per night."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "health"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an educational tutor."
+            },
+            {
+              "role": "user",
+              "content": "What are symptoms of dehydration?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Thirst, dry mouth, dark urine, fatigue, dizziness, and headache."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "health",
+      "evaluation": {
+        "score": 3,
+        "feedback": "Clear explanation",
+        "evaluatedAt": 1766047366597
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a friendly conversationalist."
+            },
+            {
+              "role": "user",
+              "content": "Write a haiku about programming."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Code flows like water\nBugs hide in the shadows deep\nDebug brings the light"
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "creative"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "Write a short poem about the ocean."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Waves crash upon the shore,\nEndless blue forevermore."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "creative",
+      "evaluation": {
+        "score": 3,
+        "feedback": "Well structured",
+        "evaluatedAt": 1767840927182
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": "Create a limerick about a cat."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "There once was a cat named Lou,\nWho only ate fish that was new."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "creative",
+      "evaluation": {
+        "score": 3,
+        "feedback": "Good response",
+        "evaluatedAt": 1767790649312
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a coding assistant."
+            },
+            {
+              "role": "user",
+              "content": "Write a metaphor about life."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Life is a river, constantly flowing forward toward the sea."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "creative",
+      "evaluation": {
+        "score": 3,
+        "feedback": "Comprehensive answer",
+        "evaluatedAt": 1766117287598
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a creative writing assistant."
+            },
+            {
+              "role": "user",
+              "content": "Describe a sunset in one sentence."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "The sun melts into the horizon, painting the sky orange and purple."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "creative"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an educational tutor."
+            },
+            {
+              "role": "user",
+              "content": "Tell me a joke."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Why don't scientists trust atoms? Because they make up everything!"
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "humor",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Clear explanation",
+        "evaluatedAt": 1767616000947
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a friendly conversationalist."
+            },
+            {
+              "role": "user",
+              "content": "Tell me a programming joke."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Why do programmers prefer dark mode? Because light attracts bugs!"
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "humor",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Comprehensive answer",
+        "evaluatedAt": 1766744730532
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "What's a good dad joke?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "I'm reading a book about anti-gravity. It's impossible to put down!"
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "humor",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Accurate and helpful",
+        "evaluatedAt": 1767756652476
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": "Tell me a math joke."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Why was the math book sad? Because it had too many problems."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "humor",
+      "evaluation": {
+        "score": 3,
+        "feedback": "Clear explanation",
+        "evaluatedAt": 1767650952414
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a coding assistant."
+            },
+            {
+              "role": "user",
+              "content": "Got any jokes about computers?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Why did the computer go to the doctor? Because it had a virus!"
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "humor",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Good response",
+        "evaluatedAt": 1766101854708
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a creative writing assistant."
+            },
+            {
+              "role": "user",
+              "content": "What is machine learning?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Machine learning is AI where computers learn from data without explicit programming."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "technology",
+      "evaluation": {
+        "score": 3,
+        "feedback": "Accurate and helpful",
+        "evaluatedAt": 1765754760327
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an educational tutor."
+            },
+            {
+              "role": "user",
+              "content": "What is cloud computing?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Cloud computing delivers computing services over the internet."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "technology",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Well structured",
+        "evaluatedAt": 1765874505549
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a friendly conversationalist."
+            },
+            {
+              "role": "user",
+              "content": "What is an API?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "An API is a set of protocols that allows software applications to communicate."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "technology",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Accurate and helpful",
+        "evaluatedAt": 1765789430573
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "What is blockchain?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Blockchain is a distributed ledger technology that records transactions."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "technology"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": "What is 5G?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "5G is the fifth generation of mobile network technology with faster speeds."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "technology",
+      "evaluation": {
+        "score": 3,
+        "feedback": "Clear explanation",
+        "evaluatedAt": 1767176900085
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a coding assistant."
+            },
+            {
+              "role": "user",
+              "content": "How do I make coffee?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Add water and coffee to your maker, start brewing, then pour and enjoy!"
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "general",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Good response",
+        "evaluatedAt": 1768244468194
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a creative writing assistant."
+            },
+            {
+              "role": "user",
+              "content": "How do I tie a tie?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Cross the wide end over, bring underneath, then over, and pull through the loop."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "general",
+      "evaluation": {
+        "score": 3,
+        "feedback": "Clear explanation",
+        "evaluatedAt": 1767979039742
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an educational tutor."
+            },
+            {
+              "role": "user",
+              "content": "What's a good way to start the day?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Wake consistently, hydrate, stretch, eat breakfast, and set intentions."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "general",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Well structured",
+        "evaluatedAt": 1765949378581
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a friendly conversationalist."
+            },
+            {
+              "role": "user",
+              "content": "How do I cook pasta?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Boil salted water, add pasta, cook per directions, drain, and add sauce."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "general",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Well structured",
+        "evaluatedAt": 1765760771355
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "What should I pack for a trip?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Clothes, toiletries, medications, phone charger, and travel documents."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "general"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": "What is 2 + 2?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "2 + 2 equals 4."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "math",
+      "evaluation": {
+        "score": 3,
+        "feedback": "Comprehensive answer",
+        "evaluatedAt": 1766333776228
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a coding assistant."
+            },
+            {
+              "role": "user",
+              "content": "What is the square root of 144?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "The square root of 144 is 12."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "math"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a creative writing assistant."
+            },
+            {
+              "role": "user",
+              "content": "Solve for x: 2x + 5 = 15"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "x = 5. Subtracting 5 from both sides gives 2x = 10, then dividing by 2 gives x = 5."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "math",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Accurate and helpful",
+        "evaluatedAt": 1767394502681
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an educational tutor."
+            },
+            {
+              "role": "user",
+              "content": "What is 15% of 200?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "15% of 200 is 30."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "math",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Good response",
+        "evaluatedAt": 1766055545461
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a friendly conversationalist."
+            },
+            {
+              "role": "user",
+              "content": "What is the derivative of x^2?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "The derivative of x^2 is 2x."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "math",
+      "evaluation": {
+        "score": 3,
+        "feedback": "Clear explanation",
+        "evaluatedAt": 1765849793730
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "What is the capital of France?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "The capital of France is Paris."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "geography",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Accurate and helpful",
+        "evaluatedAt": 1767208275255
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": "What is the largest ocean?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "The Pacific Ocean is the largest ocean on Earth."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "geography",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Comprehensive answer",
+        "evaluatedAt": 1766876993604
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a coding assistant."
+            },
+            {
+              "role": "user",
+              "content": "Name three countries in South America."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Brazil, Argentina, and Colombia are three countries in South America."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "geography",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Good response",
+        "evaluatedAt": 1767342282333
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a creative writing assistant."
+            },
+            {
+              "role": "user",
+              "content": "What is the longest river in the world?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "The Nile River is traditionally considered the longest river in the world at about 6,650 km."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "geography"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an educational tutor."
+            },
+            {
+              "role": "user",
+              "content": "What continent is Egypt in?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Egypt is located in Africa, though the Sinai Peninsula is in Asia."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "geography",
+      "evaluation": {
+        "score": 3,
+        "feedback": "Comprehensive answer",
+        "evaluatedAt": 1768281811718
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a friendly conversationalist."
+            },
+            {
+              "role": "user",
+              "content": "Explain quantum computing in simple terms."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Quantum computing uses quantum bits (qubits) that can be both 0 and 1 at the same time, unlike regular bits."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "science"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "What is photosynthesis?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Photosynthesis is the process by which plants convert sunlight, water, and carbon dioxide into glucose and oxygen."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "science"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": "What is the speed of light?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "The speed of light in a vacuum is approximately 299,792,458 meters per second."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "science",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Accurate and helpful",
+        "evaluatedAt": 1768222225092
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a coding assistant."
+            },
+            {
+              "role": "user",
+              "content": "What causes seasons on Earth?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Seasons are caused by the tilt of Earth's axis (about 23.5 degrees) as it orbits the Sun."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "science"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a creative writing assistant."
+            },
+            {
+              "role": "user",
+              "content": "What is DNA?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "DNA is the molecule that carries genetic instructions for all known living organisms."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "science",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Clear explanation",
+        "evaluatedAt": 1766533614880
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an educational tutor."
+            },
+            {
+              "role": "user",
+              "content": "Write a function to reverse a string in Python."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "def reverse_string(s): return s[::-1]"
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "coding",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Accurate and helpful",
+        "evaluatedAt": 1768080500747
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a friendly conversationalist."
+            },
+            {
+              "role": "user",
+              "content": "How do I create a list in JavaScript?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Use square brackets: const myList = [1, 2, 3];"
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "coding"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "What is a closure in programming?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "A closure is a function that has access to variables from its outer scope."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "coding",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Accurate and helpful",
+        "evaluatedAt": 1766073862785
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": "Explain == vs === in JavaScript."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "== performs type coercion, === checks both value and type without coercion."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "coding",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Clear explanation",
+        "evaluatedAt": 1766537895737
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a coding assistant."
+            },
+            {
+              "role": "user",
+              "content": "What is recursion?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Recursion is when a function calls itself to solve a problem by breaking it down."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "coding",
+      "evaluation": {
+        "score": 3,
+        "feedback": "Well structured",
+        "evaluatedAt": 1765809037690
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a creative writing assistant."
+            },
+            {
+              "role": "user",
+              "content": "Who invented the telephone?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Alexander Graham Bell invented the telephone in 1876."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "history"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an educational tutor."
+            },
+            {
+              "role": "user",
+              "content": "When did World War II end?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "World War II ended in 1945."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "history"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a friendly conversationalist."
+            },
+            {
+              "role": "user",
+              "content": "Who was the first US president?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "George Washington was the first president, serving from 1789 to 1797."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "history",
+      "evaluation": {
+        "score": 3,
+        "feedback": "Clear explanation",
+        "evaluatedAt": 1768253015725
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "What was the Renaissance?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "The Renaissance was a cultural movement that began in Italy in the 14th century."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "history"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": "When was the Great Wall built?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "The Great Wall was built over many centuries, starting as early as the 7th century BC."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "history"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a coding assistant."
+            },
+            {
+              "role": "user",
+              "content": "What are the benefits of exercise?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Exercise improves cardiovascular health, boosts mood, and promotes better sleep."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "health",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Good response",
+        "evaluatedAt": 1766304852819
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a creative writing assistant."
+            },
+            {
+              "role": "user",
+              "content": "How much water should I drink daily?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "About 8 glasses (64 ounces) of water per day is generally recommended."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "health",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Accurate and helpful",
+        "evaluatedAt": 1765917450643
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an educational tutor."
+            },
+            {
+              "role": "user",
+              "content": "What foods are high in protein?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Chicken, fish, eggs, legumes, tofu, Greek yogurt, and nuts are high in protein."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "health",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Well structured",
+        "evaluatedAt": 1766818264157
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a friendly conversationalist."
+            },
+            {
+              "role": "user",
+              "content": "How many hours of sleep do adults need?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Most adults need 7-9 hours of sleep per night."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "health",
+      "evaluation": {
+        "score": 3,
+        "feedback": "Accurate and helpful",
+        "evaluatedAt": 1767349756995
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "What are symptoms of dehydration?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Thirst, dry mouth, dark urine, fatigue, dizziness, and headache."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "health",
+      "evaluation": {
+        "score": 3,
+        "feedback": "Good response",
+        "evaluatedAt": 1765886656997
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": "Write a haiku about programming."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Code flows like water\nBugs hide in the shadows deep\nDebug brings the light"
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "creative"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a coding assistant."
+            },
+            {
+              "role": "user",
+              "content": "Write a short poem about the ocean."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Waves crash upon the shore,\nEndless blue forevermore."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "creative",
+      "evaluation": {
+        "score": 3,
+        "feedback": "Clear explanation",
+        "evaluatedAt": 1767323821039
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a creative writing assistant."
+            },
+            {
+              "role": "user",
+              "content": "Create a limerick about a cat."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "There once was a cat named Lou,\nWho only ate fish that was new."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "creative",
+      "evaluation": {
+        "score": 3,
+        "feedback": "Accurate and helpful",
+        "evaluatedAt": 1767716057807
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an educational tutor."
+            },
+            {
+              "role": "user",
+              "content": "Write a metaphor about life."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Life is a river, constantly flowing forward toward the sea."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "creative",
+      "evaluation": {
+        "score": 3,
+        "feedback": "Clear explanation",
+        "evaluatedAt": 1766988466817
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a friendly conversationalist."
+            },
+            {
+              "role": "user",
+              "content": "Describe a sunset in one sentence."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "The sun melts into the horizon, painting the sky orange and purple."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "creative",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Good response",
+        "evaluatedAt": 1767453517538
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "Tell me a joke."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Why don't scientists trust atoms? Because they make up everything!"
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "humor",
+      "evaluation": {
+        "score": 3,
+        "feedback": "Well structured",
+        "evaluatedAt": 1768051228256
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": "Tell me a programming joke."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Why do programmers prefer dark mode? Because light attracts bugs!"
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "humor",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Comprehensive answer",
+        "evaluatedAt": 1767862098146
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a coding assistant."
+            },
+            {
+              "role": "user",
+              "content": "What's a good dad joke?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "I'm reading a book about anti-gravity. It's impossible to put down!"
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "humor",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Clear explanation",
+        "evaluatedAt": 1767193003604
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a creative writing assistant."
+            },
+            {
+              "role": "user",
+              "content": "Tell me a math joke."
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Why was the math book sad? Because it had too many problems."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "humor",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Well structured",
+        "evaluatedAt": 1766325214870
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an educational tutor."
+            },
+            {
+              "role": "user",
+              "content": "Got any jokes about computers?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Why did the computer go to the doctor? Because it had a virus!"
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "humor",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Good response",
+        "evaluatedAt": 1767134602316
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a friendly conversationalist."
+            },
+            {
+              "role": "user",
+              "content": "What is machine learning?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Machine learning is AI where computers learn from data without explicit programming."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "technology"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "What is cloud computing?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Cloud computing delivers computing services over the internet."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "technology",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Clear explanation",
+        "evaluatedAt": 1768032475128
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": "What is an API?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "An API is a set of protocols that allows software applications to communicate."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "technology",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Good response",
+        "evaluatedAt": 1767920440855
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a coding assistant."
+            },
+            {
+              "role": "user",
+              "content": "What is blockchain?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Blockchain is a distributed ledger technology that records transactions."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "technology"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a creative writing assistant."
+            },
+            {
+              "role": "user",
+              "content": "What is 5G?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "5G is the fifth generation of mobile network technology with faster speeds."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "technology",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Good response",
+        "evaluatedAt": 1766903332291
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an educational tutor."
+            },
+            {
+              "role": "user",
+              "content": "How do I make coffee?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Add water and coffee to your maker, start brewing, then pour and enjoy!"
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "general",
+      "evaluation": {
+        "score": 5,
+        "feedback": "Clear explanation",
+        "evaluatedAt": 1766618116657
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a friendly conversationalist."
+            },
+            {
+              "role": "user",
+              "content": "How do I tie a tie?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Cross the wide end over, bring underneath, then over, and pull through the loop."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "general"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "What's a good way to start the day?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Wake consistently, hydrate, stretch, eat breakfast, and set intentions."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "general"
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": "How do I cook pasta?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Boil salted water, add pasta, cook per directions, drain, and add sauce."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "general",
+      "evaluation": {
+        "score": 4,
+        "feedback": "Well structured",
+        "evaluatedAt": 1768199915793
+      }
+    },
+    {
+      "data": {
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a coding assistant."
+            },
+            {
+              "role": "user",
+              "content": "What should I pack for a trip?"
+            }
+          ]
+        },
+        "output": {
+          "messages": {
+            "role": "assistant",
+            "content": "Clothes, toiletries, medications, phone charger, and travel documents."
+          },
+          "finish_reason": "stop"
+        }
+      },
+      "topic": "general",
+      "evaluation": {
+        "score": 3,
+        "feedback": "Comprehensive answer",
+        "evaluatedAt": 1766318185471
+      }
+    }
+  ]
+}

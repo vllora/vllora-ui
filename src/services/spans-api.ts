@@ -23,6 +23,9 @@ export interface ListSpansQuery {
   // Label filter - comma-separated labels (e.g., "flight_search,budget_agent")
   labels?: string;         // Filter by labels from attribute.label
 
+  // Free-text search (case-insensitive substring match on attribute JSON)
+  search?: string;         // Search query for text matching
+
   // Time range filters
   startTime?: number;      // Filter spans that started after this timestamp (microseconds)
   endTime?: number;        // Filter spans that started before this timestamp (microseconds)

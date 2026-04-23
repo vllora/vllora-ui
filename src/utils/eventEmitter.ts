@@ -1,5 +1,6 @@
 import { McpServerConfig } from '@/services/mcp-api';
 import mitt, { Emitter } from 'mitt';
+import type { EvalJob } from '@/types/eval-job';
 
 // ============================================================================
 // Distri Agent Event Types
@@ -77,6 +78,88 @@ type VlloraEvents = {
   };
   vllora_input_speechRecognitionStart: Record<string, never>;
   vllora_input_speechRecognitionEnd: Record<string, never>;
+  // Finetune job events
+  vllora_finetune_job_created: { jobId?: string; workflowId: string };
+  // Eval job events
+  vllora_eval_job_update: { jobId: string; job: EvalJob };
+  // Eval job completed/failed (triggers Lucy auto-analysis)
+  vllora_eval_job_completed: { jobId: string; workflowId: string; verdict: string };
+  // Finetune job completed/failed (triggers Lucy auto-analysis)
+  vllora_finetune_job_completed: { jobId: string; workflowId: string };
+  // Record scores updated (from BE state tracker via FE polling)
+  vllora_record_scores_updated: { workflowId: string; scoreType: string };
+  // Lucy assistant prompt trigger (from UI actions like "Generate for topic")
+  vllora_lucy_prompt: { prompt: string };
+  // Knowledge source events
+  vllora_knowledge_source_updated: {
+    workflowId: string;
+    sourceId?: string;
+    progress?: {
+      step: string;
+      current?: number;
+      total?: number;
+      percent?: number;
+    };
+  };
+  // plan execution progress
+  vllora_plan_progress: { progress: import('@/lib/distri-finetune-tools/steps/execute-plan').ExecutionProgress };
+  // plan generation started (show loading in right panel and open plan preview state)
+  vllora_plan_generating: { workflowId: string; switchToReadme?: boolean };
+  // plan proposed (for displaying in right panel)
+  vllora_plan_proposed: {
+    workflowId: string;
+    plan: unknown;
+    diff?: import('@/components/datasets/plan-section/plan-markdown-utils').PlanDiff;
+  };
+  // plan markdown updated (content-only update during execution — does NOT reset plan status)
+  vllora_plan_markdown_updated: {
+    workflowId: string;
+    plan: unknown;
+    /** Optional status transition: 'executing' during steps, 'completed'/'failed' on final call */
+    status?: 'executing' | 'completed' | 'failed';
+    /** Optional error message when status is 'failed' — shown in plan footer */
+    error_message?: string;
+  };
+  // plan dismissed (user closed the card without approving)
+  vllora_plan_dismissed: { workflowId: string };
+  // plan approved (user approved, triggers execution)
+  vllora_plan_approved: { workflowId: string; plan: unknown };
+  // Workflow updated (triggers refresh in UI)
+  vllora_workflow_updated: { workflowId: string };
+  // Data generation progress (for showing loading state in Records tab)
+  vllora_data_generation_progress: {
+    workflowId: string;
+    status: 'started' | 'progress' | 'completed' | 'failed';
+    total: number;
+    completed: number;
+    currentBatch?: number;
+    totalBatches?: number;
+    /** Current topic being generated (for showing loading indicator) */
+    currentTopic?: string;
+    /** Records completed for current topic */
+    topicCompleted?: number;
+    /** Total records to generate for current topic */
+    topicTotal?: number;
+    error?: string;
+  };
+  // Switch to a specific tab during execution
+  // Known sections + arbitrary workspace paths (e.g. "documents/{sourceId}")
+  vllora_switch_tab: {
+    workflowId: string;
+    tab: 'overview' | 'records' | 'evaluator' | 'jobs' | 'deploy' | (string & {});
+  };
+  // Open a drawer (docs or readme) from non-React code
+  vllora_open_drawer: {
+    type: 'docs' | 'readme';
+  };
+  // Docs are still processing — UI should auto-prompt Lucy when they're done
+  vllora_docs_awaiting_plan: { workflowId: string };
+  // Filter records table by source document (from KnowledgeSourceCard clicks)
+  vllora_filter_by_source: { workflowId: string; sourceId: string | null };
+  // Navigate to and highlight a record in the records table
+  vllora_highlight_record: { recordId: string };
+  // Navigate to a record's topic tab and highlight it (from eval results click)
+  vllora_navigate_to_record: { workflowId: string; recordId: string };
 };
 
 // ============================================================================
@@ -92,3 +175,24 @@ export const eventEmitter = emitter;
 
 // Export types for use in tool handlers
 export type { DistriGetStateEvents, DistriChangeUiEvents };
+
+// =============================================================================
+// Pending Highlight Queue
+// =============================================================================
+// When navigating to the records tab from another tab (eval detail, overview),
+// the RecordsTable component unmounts and remounts. The highlight event may fire
+// before the new instance registers its listener. This queue bridges the gap:
+// producers call `setPendingHighlight()`, the RecordsTable calls `consumePendingHighlight()`
+// on mount to pick up any queued highlight.
+
+let pendingHighlightRecordId: string | null = null;
+
+export function setPendingHighlight(recordId: string): void {
+  pendingHighlightRecordId = recordId;
+}
+
+export function consumePendingHighlight(): string | null {
+  const id = pendingHighlightRecordId;
+  pendingHighlightRecordId = null;
+  return id;
+}

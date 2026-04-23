@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Source Document — Interactive Mockup (Option D)</title>
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0a0a0a; color: #d4d4d8; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; height: 100vh; display: flex; flex-direction: column; }
+  [data-lucide] { width: 14px; height: 14px; stroke-width: 1.8; }
+
+  .header-bar { padding: 8px 16px; border-bottom: 1px solid #1e1e1e; font-size: 11px; color: #52525b; display: flex; align-items: center; gap: 8px; }
+  .header-bar strong { color: #a1a1aa; }
+
+  .split { flex: 1; display: grid; grid-template-columns: 340px 1fr; overflow: hidden; }
+  .left { border-right: 1px solid #1e1e1e; display: flex; flex-direction: column; overflow: hidden; }
+  .right { overflow-y: auto; display: flex; flex-direction: column; }
+  .left::-webkit-scrollbar, .right::-webkit-scrollbar { width: 4px; }
+  .left::-webkit-scrollbar-thumb, .right::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+
+  /* Doc header */
+  .doc-header { padding: 12px 16px; border-bottom: 1px solid #1e1e1e; flex-shrink: 0; }
+  .doc-header .doc-row { display: flex; align-items: center; gap: 8px; }
+  .doc-header .doc-title { font-size: 13px; font-weight: 600; color: #e4e4e7; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .doc-header .doc-meta { font-size: 10px; color: #52525b; margin-top: 2px; display: flex; gap: 8px; }
+  .doc-header .doc-topics { display: flex; gap: 4px; margin-top: 8px; flex-wrap: wrap; }
+  .topic-chip { font-size: 9px; padding: 1px 6px; border-radius: 3px; border: 1px solid; cursor: default; }
+
+  /* Search */
+  .search-bar { padding: 8px 12px; border-bottom: 1px solid #1e1e1e; flex-shrink: 0; position: relative; }
+  .search-bar input { width: 100%; background: #0a0a0a; border: 1px solid #27272a; border-radius: 6px; padding: 6px 8px 6px 30px; font-size: 11px; color: #d4d4d8; outline: none; }
+  .search-bar input:focus { border-color: #10b981; }
+  .search-bar .icon { position: absolute; left: 20px; top: 50%; transform: translateY(-50%); color: #52525b; }
+
+  /* TOC */
+  .toc { flex: 1; overflow-y: auto; padding: 4px 0; }
+  .toc-group { padding: 10px 16px 4px; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #3f3f46; }
+  .toc-item { padding: 6px 16px; cursor: pointer; transition: all 0.15s; border-left: 2px solid transparent; }
+  .toc-item:hover { background: rgba(255,255,255,0.02); }
+  .toc-item.active { border-left-color: #10b981; background: rgba(16,185,129,0.05); }
+  .toc-item .toc-top { display: flex; align-items: center; gap: 6px; }
+  .toc-item .toc-num { font-size: 9px; color: #3f3f46; width: 20px; font-weight: 500; flex-shrink: 0; }
+  .toc-item .toc-name { flex: 1; font-size: 11px; color: #a1a1aa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+  .toc-item.active .toc-name { color: #10b981; }
+  .toc-item .toc-size { font-size: 9px; color: #3f3f46; flex-shrink: 0; }
+  .toc-item .toc-preview { font-size: 10px; color: #3f3f46; line-height: 1.4; padding-left: 26px; margin-top: 2px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .toc-item .toc-chips { padding-left: 26px; margin-top: 3px; display: flex; gap: 4px; }
+  .toc-item.hidden { display: none; }
+
+  /* Reader */
+  .reader-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #1e1e1e; flex-shrink: 0; }
+  .reader-header .rh-left { display: flex; align-items: center; gap: 8px; }
+  .reader-header .rh-badge { font-size: 9px; padding: 2px 8px; border-radius: 4px; background: #10b98120; color: #10b981; font-weight: 600; }
+  .reader-header .rh-title { font-size: 14px; font-weight: 600; color: #e4e4e7; }
+  .reader-header .rh-right { display: flex; align-items: center; gap: 8px; }
+  .reader-header .rh-counter { font-size: 10px; color: #52525b; }
+  .reader-header .nav-btn { background: none; border: 1px solid #27272a; color: #71717a; border-radius: 4px; width: 26px; height: 26px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+  .reader-header .nav-btn:hover { color: #d4d4d8; border-color: #3f3f46; }
+  .reader-header .nav-btn:disabled { opacity: 0.3; cursor: default; }
+
+  .reader-content { flex: 1; padding: 16px; font-size: 13px; color: #bcbcbc; line-height: 1.8; overflow-y: auto; }
+  .reader-content p { margin-bottom: 12px; }
+
+  .reader-footer { flex-shrink: 0; padding: 10px 16px; border-top: 1px solid #1e1e1e; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .reader-footer .footer-label { font-size: 10px; color: #52525b; }
+
+  /* No results */
+  .no-results { padding: 24px 16px; text-align: center; color: #3f3f46; font-size: 11px; }
+</style>
+</head>
+<body>
+
+<div class="header-bar">
+  <strong>Option D — Interactive Mockup</strong>
+  Click parts in the TOC, try searching, use prev/next buttons
+</div>
+
+<div class="split">
+  <!-- LEFT PANEL -->
+  <div class="left">
+    <div class="doc-header">
+      <div class="doc-row">
+        <i data-lucide="file-text" style="width:16px;height:16px;color:#52525b;flex-shrink:0"></i>
+        <div style="flex:1;min-width:0;">
+          <div class="doc-title">Learn and Master Progressive Chess</div>
+          <div class="doc-meta"><span>55 parts</span><span>57.1K chars</span></div>
+        </div>
+      </div>
+      <div class="doc-topics">
+        <span class="topic-chip" style="background:#10b98110;color:#10b981;border-color:#10b98120;">Positional Concepts</span>
+        <span class="topic-chip" style="background:#f59e0b10;color:#f59e0b;border-color:#f59e0b20;">Game Analysis</span>
+        <span class="topic-chip" style="background:#8b5cf610;color:#8b5cf6;border-color:#8b5cf620;">Piece Movement</span>
+        <span class="topic-chip" style="background:#ef444410;color:#ef4444;border-color:#ef444420;">Mating Patterns</span>
+      </div>
+    </div>
+
+    <div class="search-bar">
+      <i data-lucide="search" class="icon" style="width:12px;height:12px"></i>
+      <input type="text" id="searchInput" placeholder="Search parts..." oninput="filterParts()" />
+    </div>
+
+    <div class="toc" id="toc">
+      <div class="no-results" id="noResults" style="display:none;">No parts match your search</div>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="right">
+    <div class="reader-header">
+      <div class="rh-left">
+        <span class="rh-badge" id="partType">TEXT</span>
+        <span class="rh-title" id="partTitle">Title Page</span>
+      </div>
+      <div class="rh-right">
+        <span class="rh-counter" id="partCounter">1 of 55</span>
+        <button class="nav-btn" id="prevBtn" onclick="navigate(-1)"><i data-lucide="chevron-left" style="width:14px;height:14px"></i></button>
+        <button class="nav-btn" id="nextBtn" onclick="navigate(1)"><i data-lucide="chevron-right" style="width:14px;height:14px"></i></button>
+      </div>
+    </div>
+    <div class="reader-content" id="readerContent"></div>
+    <div class="reader-footer" id="readerFooter"></div>
+  </div>
+</div>
+
+<script>
+// Sample data - simulating 20 parts from a chess book
+const PARTS = [
+  { id: 1, group: "Front Matter", title: "Title Page", chars: 682, topic: null, topicColor: null,
+    preview: "Learn and Master Progressive Chess Matej Guid. The CIP record was created by the National and University Library...",
+    content: "Learn and Master Progressive Chess\n\nMatej Guid\n\nThe CIP record was created by the National and University Library Ljubljana. COBISS.SI-ID=293222144 ISBN 978-961-6209-96-0 (pdf)\n\nThe electronic edition of this book is available at URL: http://zalozba.fri.uni-lj.si/guid2017.pdf.\n\nCopyright 2017 Zalozba UL FRI. All rights reserved.\n\nReviewers: prof. dr. Ivan Bratko, prof. dr. H. Jaap van den Herik\nProofreading: prof. dr. Walter A. Kosters\nPublisher: Zalozba UL FRI, Ljubljana University of Ljubljana, Faculty of Computer and Information Science\nFirst edition, 2017\n\nDesign of book cover: Bojana Fortuna\nIllustrations: prof. dr. Matej Guid with DeepArt.io\nEditor: prof. dr. Franc Solina" },
+  { id: 2, group: "Front Matter", title: "Preface", chars: 2400, topic: "Positional Concepts", topicColor: "#10b981",
+    preview: "Progressive Chess is a chess variant in which the number of consecutive moves increases by one each turn...",
+    content: "Progressive Chess is a chess variant in which the number of consecutive moves increases by one each turn. White starts with one move, then Black makes two consecutive moves, White responds with three, and so on.\n\nThis unique mechanic fundamentally changes the strategic landscape of chess, creating exciting tactical opportunities that don't exist in standard chess. The increasing number of moves per turn means that positional advantages can be exploited much more quickly, and tactical threats can emerge from seemingly quiet positions.\n\nThis book aims to provide a comprehensive guide to mastering Progressive Chess, from the basic rules through to advanced strategic concepts. Whether you're a complete beginner to the variant or an experienced player looking to deepen your understanding, you'll find valuable insights within these pages." },
+  { id: 3, group: "Front Matter", title: "Foreword", chars: 8600, topic: null, topicColor: null,
+    preview: "The game of progressive chess has a long history going back to the 19th century. In this fascinating variant...",
+    content: "The game of progressive chess has a long history going back to the 19th century. In this fascinating variant of chess, each player makes an increasing number of moves per turn, creating a uniquely dynamic and unpredictable game.\n\nThe first known mention of progressive chess appears in Italian chess literature from the 1870s, where it was played as a recreational variant among club players. Since then, it has grown into a serious competitive discipline with its own body of theory and devoted following.\n\nWhat makes progressive chess particularly interesting from a theoretical standpoint is how it transforms familiar chess concepts. Piece values shift dramatically — a knight, for instance, becomes far more dangerous when it can make multiple moves in sequence. Opening theory is completely different, as the standard chess openings have no application here." },
+  { id: 4, group: "Games", title: "Game 1: Opening Principles", chars: 1291, topic: "Game Analysis", topicColor: "#f59e0b",
+    preview: "The first game illustrates the basic principles of progressive chess openings and the importance of central control...",
+    content: "Game 1: Opening Principles\n\n1. e4 (White's single move)\n1... d5, Nf6 (Black's two moves)\n2. exd5, Qxd5, Qa5 (White's three moves)\n\nThis game illustrates the fundamental opening principles in progressive chess. Unlike standard chess, where piece development follows well-established patterns, progressive chess requires immediate attention to piece safety and tactical threats.\n\nThe key lesson from this game is that central control remains important, but the methods to achieve it differ significantly. With multiple moves per turn, you can establish a strong center much more quickly, but you must also be aware that your opponent can dismantle it just as rapidly." },
+  { id: 5, group: "Games", title: "Game 2: Tactical Combinations", chars: 1887, topic: "Game Analysis", topicColor: "#f59e0b",
+    preview: "This game showcases the explosive tactical possibilities that arise when multiple moves combine into devastating attacks...",
+    content: "Game 2: Tactical Combinations\n\nIn this remarkable game, we see how the progressive move mechanic creates tactical possibilities that would be impossible in standard chess. The key moment arrives when White uses a sequence of four moves to create a devastating discovered attack.\n\nThe combination involves a knight sacrifice followed by a bishop reposition, opening up lines against the Black king. What makes this particularly instructive is how the attacking player calculated several moves ahead within each turn.\n\nKey takeaway: In progressive chess, tactical vision must encompass not just the next move, but the entire sequence of moves within your turn. This requires a different kind of calculation than standard chess." },
+  { id: 6, group: "Games", title: "Game 3: Endgame Technique", chars: 2133, topic: "Game Analysis", topicColor: "#f59e0b",
+    preview: "Endgames in progressive chess follow very different rules. This game demonstrates key endgame patterns...",
+    content: "Game 3: Endgame Technique\n\nEndgames in progressive chess follow very different rules than their standard chess counterparts. The increasing number of moves per turn means that even positions that would be drawn in standard chess can often be won.\n\nThis game demonstrates the key endgame principle: king activity becomes even more important in progressive chess because the king can cover much more ground when it gets multiple moves. A king that reaches the center can be a devastating force.\n\nThe rook endgame shown here illustrates how the side with the more active pieces can coordinate a decisive attack simply by having the right to make more moves in a single turn." },
+  { id: 7, group: "Content", title: "Knight Movement in Progressive Chess", chars: 1600, topic: "Piece Movement", topicColor: "#8b5cf6",
+    preview: "The knight's unique movement pattern becomes even more powerful in progressive chess because of multiple consecutive moves...",
+    content: "Knight Movement in Progressive Chess\n\nThe knight's unique L-shaped movement pattern becomes extraordinarily powerful in progressive chess. While in standard chess a knight needs several turns to traverse the board, in progressive chess it can cover vast distances in a single turn.\n\nConsider a knight on g1 in a five-move turn: Nf3, Ne5, Nd7, Nf8, Ng6 — the knight has traveled from g1 to g6 in a single turn, a journey that would take five turns in standard chess. This means knights can participate in attacks on either flank with remarkable speed.\n\nThe practical implication is that knights should be valued more highly in progressive chess than in standard chess. A well-placed knight can threaten multiple squares across the board within a single multi-move turn." },
+  { id: 8, group: "Content", title: "Bishop and Rook Dynamics", chars: 2100, topic: "Piece Movement", topicColor: "#8b5cf6",
+    preview: "Bishops and rooks gain enormous power when they can make multiple consecutive moves, creating devastating diagonal and file control...",
+    content: "Bishop and Rook Dynamics\n\nBishops and rooks are already powerful long-range pieces in standard chess, but in progressive chess their influence is magnified enormously. A bishop that can make three or four consecutive moves can control an incredible number of squares.\n\nThe key concept is 'sequential redeployment' — using multiple moves to reposition a piece from a passive square to an active one, all within a single turn. A rook on a1 can move to a3, then to e3, controlling the entire third rank and the e-file simultaneously.\n\nThis has important implications for pawn structure, as weaknesses that would be minor in standard chess can become decisive in progressive chess due to the ability of pieces to exploit them rapidly." },
+  { id: 9, group: "Content", title: "Mating Patterns", chars: 3300, topic: "Mating Patterns", topicColor: "#ef4444",
+    preview: "Mating patterns differ significantly from standard chess. With multiple moves per turn, back rank mates and smothered mates...",
+    content: "Mating Patterns in Progressive Chess\n\nMating patterns in progressive chess differ significantly from standard chess. The most important difference is that checkmate can be delivered through a sequence of moves within a single turn, meaning the defending side has no opportunity to interpose or escape between moves.\n\nBack Rank Mates: These are much more common in progressive chess because the attacking side can clear files and deliver check all in one turn. A rook on a1 can move to a3, then to h3, threatening the back rank.\n\nSmothered Mates: The knight's ability to make multiple moves makes smothered mates a constant threat. A knight can leap to unexpected squares and deliver mate from positions that would seem safe in standard chess.\n\nQueen and Bishop Batteries: With multiple moves, diagonal attacks become extremely dangerous. The queen and bishop can coordinate along diagonals with devastating effect." },
+  { id: 10, group: "Content", title: "Positional Strategy", chars: 1970, topic: "Positional Concepts", topicColor: "#10b981",
+    preview: "Positional strategy in progressive chess requires a fundamentally different approach to pawn structure and piece placement...",
+    content: "Positional Strategy in Progressive Chess\n\nPositional strategy in progressive chess requires a fundamentally different approach compared to standard chess. While the basic principles of piece activity, king safety, and pawn structure still apply, their relative importance shifts dramatically.\n\nPawn Structure: Pawns become less important as structural elements because pieces can reposition so quickly. However, passed pawns become more dangerous because they can be pushed multiple squares in a single turn.\n\nPiece Coordination: The ability to move multiple pieces in sequence means that piece coordination is paramount. A coordinated attack with several pieces moving in concert within one turn can overwhelm any defense.\n\nKing Safety: The king is both more vulnerable (attacks develop faster) and more powerful (it can escape quickly with multiple moves). Finding the right balance is key." },
+  { id: 11, group: "Content", title: "Opening Theory", chars: 2100, topic: "Positional Concepts", topicColor: "#10b981",
+    preview: "Opening theory in progressive chess is still evolving. Unlike standard chess with centuries of analysis, progressive openings...",
+    content: "Opening Theory in Progressive Chess\n\nOpening theory in progressive chess is still evolving. Unlike standard chess, which has centuries of accumulated analysis, progressive chess openings are relatively unexplored territory.\n\nThe most important principle in the opening is to avoid creating weaknesses that can be exploited when the opponent gets multiple moves. This means being particularly careful about king safety and not leaving pieces undefended.\n\nPopular opening approaches include central occupation (similar to classical chess), hypermodern strategies (controlling the center from a distance), and aggressive pawn pushes designed to create immediate tactical threats." },
+  { id: 12, group: "Content", title: "Tactical Combinations Deep Dive", chars: 4200, topic: "Game Analysis", topicColor: "#f59e0b",
+    preview: "Advanced tactical patterns that are unique to progressive chess. Double attacks, discovered checks, and multi-move sacrifices...",
+    content: "Tactical Combinations: A Deep Dive\n\nProgressive chess offers a rich tapestry of tactical possibilities that don't exist in standard chess. This chapter explores advanced patterns including multi-move sacrifices, sequential discovered attacks, and the concept of 'turn pressure.'\n\nMulti-Move Sacrifices: In progressive chess, you can sacrifice material on one move and immediately recoup it (with interest) on a subsequent move within the same turn. This creates combinations that would be impossible to calculate in standard chess.\n\nSequential Discovered Attacks: When you have multiple moves, you can set up discovered attacks and then execute them within the same turn, giving the opponent no chance to defend.\n\nTurn Pressure: As the game progresses, each turn becomes more powerful. Understanding how to maintain pressure across increasingly long turns is a key skill." },
+  { id: 13, group: "Content", title: "Advanced Endgame Patterns", chars: 1800, topic: "Mating Patterns", topicColor: "#ef4444",
+    preview: "Advanced endgame techniques including progressive pawn promotion, king hunt patterns, and fortress evaluation...",
+    content: "Advanced Endgame Patterns\n\nIn the endgame, progressive chess reveals its most fascinating strategic depths. With fewer pieces on the board, the increasing number of moves per turn becomes even more significant.\n\nProgressive Pawn Promotion: A pawn can advance multiple squares in one turn, making promotion much faster. A pawn on the 2nd rank can reach the 8th rank in just three turns, compared to six turns in standard chess.\n\nKing Hunt Patterns: With multiple moves, the attacking king can participate actively in hunts against the opponent's king. The defensive resources are limited because the attacker gets to make all their moves before the defender can respond.\n\nFortress Evaluation: Some positions that are fortresses in standard chess are won in progressive chess because the attacker can break through with multiple coordinated moves." },
+];
+
+let currentIndex = 0;
+
+function formatChars(c) {
+  return c >= 1000 ? (c/1000).toFixed(1) + 'K' : c;
+}
+
+function renderToc() {
+  const toc = document.getElementById('toc');
+  let html = '';
+  let currentGroup = '';
+
+  PARTS.forEach((part, idx) => {
+    if (part.group !== currentGroup) {
+      currentGroup = part.group;
+      html += `<div class="toc-group" data-group="${part.group}">${part.group}</div>`;
+    }
+    html += `<div class="toc-item${idx === currentIndex ? ' active' : ''}" data-idx="${idx}" onclick="selectPart(${idx})">
+      <div class="toc-top">
+        <span class="toc-num">${idx + 1}</span>
+        <span class="toc-name">${part.title}</span>
+        <span class="toc-size">${formatChars(part.chars)}</span>
+      </div>
+      <div class="toc-preview">${part.preview}</div>
+      ${part.topic ? `<div class="toc-chips"><span class="topic-chip" style="background:${part.topicColor}10;color:${part.topicColor};border-color:${part.topicColor}20;">${part.topic}</span></div>` : ''}
+    </div>`;
+  });
+
+  toc.innerHTML = `<div id="noResults" style="display:none" class="no-results">No parts match your search</div>` + html;
+}
+
+function selectPart(idx) {
+  currentIndex = idx;
+  updateView();
+}
+
+function navigate(dir) {
+  const newIdx = currentIndex + dir;
+  if (newIdx >= 0 && newIdx < PARTS.length) {
+    currentIndex = newIdx;
+    updateView();
+  }
+}
+
+function updateView() {
+  const part = PARTS[currentIndex];
+
+  // Update TOC active state
+  document.querySelectorAll('.toc-item').forEach(el => {
+    el.classList.toggle('active', parseInt(el.dataset.idx) === currentIndex);
+  });
+
+  // Scroll active item into view
+  const activeItem = document.querySelector('.toc-item.active');
+  if (activeItem) activeItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  // Update reader
+  document.getElementById('partTitle').textContent = part.title;
+  document.getElementById('partType').textContent = 'TEXT';
+  document.getElementById('partCounter').textContent = `${currentIndex + 1} of ${PARTS.length}`;
+  document.getElementById('prevBtn').disabled = currentIndex === 0;
+  document.getElementById('nextBtn').disabled = currentIndex === PARTS.length - 1;
+
+  // Render content as paragraphs
+  const paragraphs = part.content.split('\n\n').filter(p => p.trim());
+  document.getElementById('readerContent').innerHTML = paragraphs.map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('');
+
+  // Footer
+  const footer = document.getElementById('readerFooter');
+  if (part.topic) {
+    footer.innerHTML = `<span class="footer-label">Linked topic:</span>
+      <span class="topic-chip" style="background:${part.topicColor}10;color:${part.topicColor};border-color:${part.topicColor}20;">${part.topic}</span>
+      <span class="footer-label" style="margin-left:auto;">${formatChars(part.chars)} chars</span>`;
+  } else {
+    footer.innerHTML = `<span class="footer-label">No linked topics</span>
+      <span class="footer-label" style="margin-left:auto;">${formatChars(part.chars)} chars</span>`;
+  }
+}
+
+function filterParts() {
+  const query = document.getElementById('searchInput').value.toLowerCase().trim();
+  let anyVisible = false;
+  const visibleGroups = new Set();
+
+  document.querySelectorAll('.toc-item').forEach(el => {
+    const idx = parseInt(el.dataset.idx);
+    const part = PARTS[idx];
+    const match = !query ||
+      part.title.toLowerCase().includes(query) ||
+      part.preview.toLowerCase().includes(query) ||
+      (part.topic && part.topic.toLowerCase().includes(query));
+
+    el.classList.toggle('hidden', !match);
+    if (match) {
+      anyVisible = true;
+      visibleGroups.add(part.group);
+    }
+  });
+
+  // Hide/show group headers
+  document.querySelectorAll('.toc-group').forEach(el => {
+    el.style.display = visibleGroups.has(el.dataset.group) ? '' : 'none';
+  });
+
+  document.getElementById('noResults').style.display = anyVisible ? 'none' : '';
+}
+
+// Initialize
+renderToc();
+updateView();
+lucide.createIcons();
+</script>
+</body>
+</html>

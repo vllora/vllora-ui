@@ -14,7 +14,7 @@ export const DetailedRunView: React.FC<{run: RunDTO; selectedLabels?: string[]}>
     run,
     selectedLabels,
 }) => {
-    const {runMap, isLoadingSpans, loadingSpansById, selectedSpanId, setSelectedSpanId, setSelectedRunId, setDetailSpanId, hoverSpanId, setHoverSpanId, collapsedSpans, setCollapsedSpans} = ChatWindowConsumer()
+    const {runMap, isLoadingSpans, loadingSpansById, selectedSpanId, setSelectedSpanId, setSelectedRunId, setDetailSpanId, hoverSpanId, setHoverSpanId, collapsedSpans, setCollapsedSpans, isSpanSelectModeEnabled, selectedSpanIdsForActions, toggleSpanSelection} = ChatWindowConsumer()
     const {currentProjectId} = ProjectsConsumer()
     const spansByRunId: Span[] = run.run_id ? runMap[run.run_id] || [] : []
 
@@ -68,6 +68,9 @@ export const DetailedRunView: React.FC<{run: RunDTO; selectedLabels?: string[]}>
                                     }}
                                     showHighlightButton={true}
                                     selectedLabels={selectedLabels}
+                                    isSelectModeEnabled={isSpanSelectModeEnabled}
+                                    selectedSpanIdsForActions={selectedSpanIdsForActions}
+                                    onToggleSelection={toggleSpanSelection}
                                     />
                             </ErrorBoundary>
                         </div>

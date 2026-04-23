@@ -28,6 +28,9 @@ export default defineConfig({
     // Dedupe React to avoid multiple instances when using linked packages
     dedupe: ['react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime'],
   },
+  server: {
+    host: true,
+  },
   // build: { // ONLY USE THIS TO CHECK IN LOCAL
   //   outDir: path.resolve(__dirname, "../gateway/dist"),
   //   emptyOutDir: true,

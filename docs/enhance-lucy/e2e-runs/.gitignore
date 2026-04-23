@@ -1,0 +1,8 @@
+# Gitignore binary evidence files (screenshots, GIFs, DOM snapshots)
+# Only .md files (results and run index) are tracked in git
+
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.json

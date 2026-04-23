@@ -73,7 +73,7 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({ title, code, language = 'b
           )}
         </button>
       </div>}
-      <div className="rounded-lg bg-black/40">
+      <div className="rounded-lg bg-black/40 max-h-80 overflow-y-auto">
         <div style={{
           padding: '1rem',
           fontSize: '0.75rem',

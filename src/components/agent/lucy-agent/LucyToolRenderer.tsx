@@ -17,6 +17,10 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { LucyPlanRenderer, LucyExecutePlanRenderer } from './plan-render/LucyPlanRenderer';
+import { LucySavePlanRenderer } from './plan-render/LucySavePlanRenderer';
+import { LucyAnalyzeEvalRenderer } from './plan-render/LucyAnalyzeEvalRenderer';
+import { LucyAnalyzeTrainingRenderer } from './plan-render/LucyAnalyzeTrainingRenderer';
 
 // ============================================================================
 // Types
@@ -44,7 +48,7 @@ function ToolStatusBadge({ status }: { status?: string }) {
       );
     case 'completed':
       return (
-        <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+        <span className="inline-flex items-center gap-1 text-xs text-[rgb(var(--theme-600))] dark:text-[rgb(var(--theme-400))]">
           <CheckCircle2 className="h-3 w-3" />
           Completed
         </span>
@@ -151,13 +155,13 @@ export function LucySearchToolRenderer({ toolCall, state }: ToolRendererProps) {
         <div
           className={cn(
             'w-8 h-8 rounded-full flex items-center justify-center',
-            isRunning ? 'bg-blue-100 dark:bg-blue-900/30' : 'bg-emerald-100 dark:bg-emerald-900/30'
+            isRunning ? 'bg-blue-100 dark:bg-blue-900/30' : 'bg-[rgba(var(--theme-100),1)] dark:bg-[rgba(var(--theme-900),0.3)]'
           )}
         >
           {isRunning ? (
             <Loader2 className="h-4 w-4 text-blue-600 dark:text-blue-400 animate-spin" />
           ) : (
-            <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            <CheckCircle2 className="h-4 w-4 text-[rgb(var(--theme-600))] dark:text-[rgb(var(--theme-400))]" />
           )}
         </div>
         <div>
@@ -223,9 +227,14 @@ export function LucyCodeToolRenderer({ toolCall, state }: ToolRendererProps) {
  * Maps tool names to their custom renderers.
  */
 export const lucyToolRenderers: ToolRendererMap = {
-  // Add specific tool renderers here
-  // 'search': LucySearchToolRenderer,
-  // 'execute_code': LucyCodeToolRenderer,
+  // Plan tools
+  propose_plan: LucyPlanRenderer,
+  adjust_plan: LucyPlanRenderer,
+  save_plan: LucySavePlanRenderer,
+  execute_plan: LucyExecutePlanRenderer,
+  // Analysis renderers
+  analyze_evaluation: LucyAnalyzeEvalRenderer,
+  analyze_training: LucyAnalyzeTrainingRenderer,
 };
 
 /**

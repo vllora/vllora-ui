@@ -1,0 +1,1441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>vLLora — Onboarding Flow Mockup (v2)</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* ── Reset ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #09090b;
+    --bg-raised: #0f0f12;
+    --bg-card: #131318;
+    --bg-card-hover: #18181f;
+    --bg-muted: #1c1c24;
+    --bg-surface: #222230;
+    --border: #27272a;
+    --border-subtle: #1c1c22;
+    --border-focus: #3f3f46;
+    --text: #fafafa;
+    --text-secondary: #a1a1aa;
+    --text-muted: #71717a;
+    --text-dim: #52525b;
+    --text-dimmer: #3f3f46;
+    --theme-50: 236, 253, 245;
+    --theme-100: 209, 250, 229;
+    --theme-200: 167, 243, 208;
+    --theme-300: 110, 231, 183;
+    --theme-400: 52, 211, 153;
+    --theme-500: 16, 185, 129;
+    --theme-600: 5, 150, 105;
+    --theme-700: 4, 120, 87;
+    --accent: rgb(var(--theme-400));
+    --accent-muted: rgb(var(--theme-500));
+    --radius: 12px;
+    --radius-lg: 16px;
+    --radius-sm: 8px;
+    --radius-xs: 6px;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
+    --shadow-lg: 0 8px 32px rgba(0,0,0,0.5);
+    --shadow-glow: 0 0 40px rgba(var(--theme-500), 0.08);
+    --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* ── Top Navigation (Journey Steps) ── */
+  .flow-nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+    padding: 10px 16px;
+    background: rgba(9,9,11,0.85);
+    backdrop-filter: blur(16px) saturate(180%);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .flow-nav-brand {
+    display: flex; align-items: center; gap: 8px;
+    margin-right: 20px;
+    font-size: 13px; font-weight: 700; color: var(--text);
+    letter-spacing: -0.02em;
+  }
+  .flow-nav-brand .logo {
+    width: 20px; height: 20px; border-radius: 5px;
+    background: linear-gradient(135deg, rgb(var(--theme-400)), rgb(var(--theme-600)));
+    display: flex; align-items: center; justify-content: center;
+  }
+  .flow-nav-brand .logo svg { width: 12px; height: 12px; color: white; }
+  .nav-divider { width: 1px; height: 20px; background: var(--border); margin: 0 8px; }
+
+  .flow-step {
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 12px; border-radius: 999px;
+    font-size: 11.5px; font-weight: 500;
+    cursor: pointer; transition: all var(--transition);
+    border: 1px solid transparent;
+    color: var(--text-muted);
+    background: transparent;
+    white-space: nowrap;
+  }
+  .flow-step:hover { background: var(--bg-muted); color: var(--text-secondary); }
+  .flow-step.active {
+    background: rgba(var(--theme-500), 0.1);
+    border-color: rgba(var(--theme-500), 0.2);
+    color: var(--accent);
+  }
+  .flow-step.visited { color: var(--text-secondary); }
+  .flow-step .num {
+    width: 18px; height: 18px; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 700;
+    background: var(--bg-muted); color: var(--text-dim);
+    transition: all var(--transition);
+  }
+  .flow-step.active .num {
+    background: rgba(var(--theme-500), 0.2);
+    color: var(--accent);
+  }
+  .flow-step.visited .num {
+    background: rgba(var(--theme-500), 0.12);
+    color: var(--accent-muted);
+  }
+  .nav-arrow { color: var(--text-dimmer); font-size: 10px; margin: 0 2px; }
+
+  /* ── Page wrapper ── */
+  .page { display: none; min-height: 100vh; padding-top: 52px; }
+  .page.active { display: flex; flex-direction: column; animation: fadeIn 0.3s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+  /* ── Shared components ── */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    font-family: inherit; font-weight: 600; cursor: pointer;
+    border: none; transition: all var(--transition);
+    text-decoration: none;
+  }
+  .btn-primary {
+    padding: 10px 22px; border-radius: var(--radius-sm);
+    font-size: 13px;
+    background: linear-gradient(180deg, rgb(var(--theme-400)), rgb(var(--theme-500)));
+    color: #052e16;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.15);
+  }
+  .btn-primary:hover {
+    background: linear-gradient(180deg, rgb(var(--theme-300)), rgb(var(--theme-400)));
+    box-shadow: 0 2px 8px rgba(var(--theme-500), 0.3), inset 0 1px 0 rgba(255,255,255,0.2);
+    transform: translateY(-1px);
+  }
+  .btn-primary:active { transform: translateY(0); }
+  .btn-primary svg { width: 15px; height: 15px; }
+
+  .btn-secondary {
+    padding: 9px 20px; border-radius: var(--radius-sm);
+    font-size: 13px; font-weight: 500;
+    background: var(--bg-raised); color: var(--text-secondary);
+    border: 1px solid var(--border);
+  }
+  .btn-secondary:hover {
+    background: var(--bg-muted);
+    border-color: var(--border-focus);
+    color: var(--text);
+  }
+
+  .btn-ghost {
+    padding: 7px 14px; border-radius: var(--radius-xs);
+    font-size: 12px; font-weight: 500;
+    background: transparent; color: var(--text-muted);
+    border: 1px solid var(--border-subtle);
+  }
+  .btn-ghost:hover { background: var(--bg-muted); color: var(--text-secondary); border-color: var(--border); }
+  .btn-ghost svg { width: 13px; height: 13px; }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 12px; border-radius: 999px;
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .code-block {
+    position: relative;
+    background: #0c0c10;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 16px 18px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12.5px; line-height: 1.8;
+    color: var(--text-secondary);
+    overflow-x: auto;
+  }
+  .code-block .comment { color: var(--text-dim); }
+  .code-block .cmd { color: var(--accent); }
+  .code-block .str { color: #f472b6; }
+  .code-block .flag { color: #a78bfa; }
+  .code-block .output { color: var(--text-dim); font-style: italic; }
+
+  .copy-btn {
+    position: absolute; top: 10px; right: 10px;
+    padding: 4px 10px; border-radius: var(--radius-xs);
+    font-family: 'Inter', sans-serif;
+    font-size: 10px; font-weight: 600;
+    background: var(--bg-muted); color: var(--text-dim);
+    border: 1px solid var(--border-subtle);
+    cursor: pointer; transition: all var(--transition);
+    text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .copy-btn:hover { background: var(--bg-surface); color: var(--text-secondary); }
+
+  /* ══════════════════════════════════════════════
+     PAGE 1: HOMEPAGE
+     ══════════════════════════════════════════════ */
+  .homepage {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; padding: 7vh 24px 64px;
+    position: relative; overflow: hidden;
+  }
+  /* Multi-layer glow */
+  .homepage .glow-1 {
+    position: absolute; top: -100px; left: 50%; transform: translateX(-50%);
+    width: 800px; height: 500px;
+    background: radial-gradient(ellipse at center, rgba(var(--theme-500),0.07) 0%, transparent 65%);
+    pointer-events: none;
+  }
+  .homepage .glow-2 {
+    position: absolute; top: 80px; left: 50%; transform: translateX(-50%);
+    width: 400px; height: 300px;
+    background: radial-gradient(circle at center, rgba(var(--theme-400),0.04) 0%, transparent 60%);
+    pointer-events: none; filter: blur(40px);
+  }
+
+  .hero-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 14px; border-radius: 999px;
+    border: 1px solid rgba(var(--theme-500), 0.15);
+    background: rgba(var(--theme-500), 0.05);
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--accent);
+    margin-bottom: 28px;
+    position: relative;
+  }
+  .hero-badge svg { width: 12px; height: 12px; }
+
+  .hero-title {
+    font-size: clamp(2rem, 4vw, 2.75rem);
+    font-weight: 800; line-height: 1.1;
+    letter-spacing: -0.03em; text-align: center;
+    max-width: 560px; margin-bottom: 16px;
+    position: relative;
+  }
+  .hero-title .gradient {
+    background: linear-gradient(135deg, rgb(var(--theme-300)), rgb(var(--theme-500)), rgb(var(--theme-700)));
+    background-size: 200% auto;
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    animation: shimmer-text 4s ease-in-out infinite alternate;
+  }
+  @keyframes shimmer-text {
+    0% { background-position: 0% center; }
+    100% { background-position: 100% center; }
+  }
+
+  .hero-subtitle {
+    font-size: 15px; color: var(--text-muted);
+    text-align: center; max-width: 440px;
+    margin-bottom: 44px; line-height: 1.6;
+    position: relative;
+  }
+
+  /* How-it-works — horizontal stepper */
+  .hiw {
+    width: 100%; max-width: 880px;
+    margin-bottom: 44px; position: relative;
+  }
+  .hiw-label {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--text-dim);
+    text-align: center; margin-bottom: 24px;
+  }
+  .hiw-grid {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+  }
+  .hiw-card {
+    position: relative;
+    padding: 28px 24px 24px;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-card);
+    transition: all 0.3s ease;
+    cursor: default;
+  }
+  .hiw-card:hover {
+    border-color: var(--border);
+    background: var(--bg-card-hover);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+  }
+  .hiw-card .step-label {
+    position: absolute; top: -10px; left: 20px;
+    padding: 2px 10px; border-radius: 999px;
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .hiw-card:nth-child(1) .step-label { background: #1e1b4b; color: #a78bfa; border: 1px solid #2e2661; }
+  .hiw-card:nth-child(2) .step-label { background: #022c22; color: var(--accent); border: 1px solid rgba(var(--theme-500),0.3); }
+  .hiw-card:nth-child(3) .step-label { background: #4a1d58; color: #e879f9; border: 1px solid #6b2f7b; }
+
+  .hiw-icon {
+    width: 44px; height: 44px; border-radius: var(--radius);
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 16px;
+  }
+  .hiw-card:nth-child(1) .hiw-icon { background: rgba(139,92,246,0.1); }
+  .hiw-card:nth-child(2) .hiw-icon { background: rgba(var(--theme-500),0.1); }
+  .hiw-card:nth-child(3) .hiw-icon { background: rgba(232,121,249,0.1); }
+
+  .hiw-icon svg { width: 22px; height: 22px; }
+  .hiw-card:nth-child(1) .hiw-icon svg { color: #a78bfa; }
+  .hiw-card:nth-child(2) .hiw-icon svg { color: var(--accent); }
+  .hiw-card:nth-child(3) .hiw-icon svg { color: #e879f9; }
+
+  .hiw-card h3 { font-size: 14px; font-weight: 700; margin-bottom: 6px; letter-spacing: -0.01em; }
+  .hiw-card p { font-size: 12.5px; color: var(--text-muted); line-height: 1.55; }
+
+  .hiw-card .mini-code {
+    margin-top: 12px; padding: 8px 12px;
+    background: rgba(0,0,0,0.3); border-radius: var(--radius-xs);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; color: var(--text-dim);
+    border: 1px solid rgba(255,255,255,0.04);
+  }
+  .hiw-card .mini-code .cmd { color: var(--accent); }
+  .hiw-card .mini-code .str { color: #f472b6; }
+
+  /* Connector arrows between cards */
+  .hiw-grid::after, .hiw-grid::before {
+    content: ''; position: absolute;
+    top: 50%; width: 16px; height: 16px;
+    /* Not using these — using border connectors inside cards instead */
+    display: none;
+  }
+
+  /* CTA Row */
+  .cta-row {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 36px; position: relative;
+  }
+
+  /* Divider */
+  .divider-row {
+    display: flex; align-items: center; gap: 16px;
+    width: 100%; max-width: 440px; margin-bottom: 28px;
+  }
+  .divider-line { flex: 1; height: 1px; background: linear-gradient(90deg, transparent, var(--border), transparent); }
+  .divider-text { font-size: 11px; color: var(--text-dimmer); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 500; }
+
+  /* Alt pathways */
+  .alt-pathways {
+    display: flex; gap: 12px; max-width: 560px; width: 100%;
+  }
+  .alt-card {
+    flex: 1; display: flex; align-items: center; gap: 12px;
+    padding: 14px 16px; border-radius: var(--radius);
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-card);
+    cursor: pointer; transition: all var(--transition);
+  }
+  .alt-card:hover {
+    border-color: var(--border);
+    background: var(--bg-card-hover);
+  }
+  .alt-card .alt-icon {
+    width: 36px; height: 36px; border-radius: var(--radius-sm);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .alt-card:nth-child(1) .alt-icon { background: rgba(251,146,60,0.1); }
+  .alt-card:nth-child(1) .alt-icon svg { color: #fb923c; }
+  .alt-card:nth-child(2) .alt-icon { background: rgba(96,165,250,0.1); }
+  .alt-card:nth-child(2) .alt-icon svg { color: #60a5fa; }
+  .alt-card .alt-icon svg { width: 18px; height: 18px; }
+  .alt-card h4 { font-size: 12.5px; font-weight: 600; margin-bottom: 2px; }
+  .alt-card p { font-size: 11px; color: var(--text-muted); }
+
+  /* Trusted by row */
+  .trust-row {
+    margin-top: 48px; text-align: center;
+  }
+  .trust-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-dimmer); margin-bottom: 12px; }
+  .trust-logos {
+    display: flex; align-items: center; justify-content: center; gap: 32px;
+    opacity: 0.3;
+  }
+  .trust-logos span { font-size: 12px; font-weight: 600; color: var(--text-muted); letter-spacing: 0.02em; }
+
+  /* ══════════════════════════════════════════════
+     PAGE 2: SETUP GUIDE (Tabbed)
+     ══════════════════════════════════════════════ */
+  .setup-page {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+  }
+  .setup-container { width: 100%; max-width: 600px; }
+
+  .setup-header {
+    text-align: center; margin-bottom: 28px;
+  }
+  .setup-header .badge {
+    background: rgba(var(--theme-500), 0.08);
+    border: 1px solid rgba(var(--theme-500), 0.15);
+    color: var(--accent);
+    margin-bottom: 14px;
+  }
+  .setup-header h1 {
+    font-size: 1.25rem; font-weight: 800; letter-spacing: -0.03em;
+    margin-bottom: 6px;
+  }
+  .setup-header p { font-size: 13px; color: var(--text-muted); }
+
+  /* Step tabs */
+  .setup-tabs {
+    display: flex; gap: 4px; padding: 4px;
+    border-radius: var(--radius); background: var(--bg-muted);
+    border: 1px solid var(--border-subtle);
+    margin-bottom: 24px;
+  }
+  .setup-tab {
+    flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 8px; border-radius: var(--radius-sm);
+    font-size: 11.5px; font-weight: 500;
+    cursor: pointer; transition: all var(--transition);
+    border: none; background: transparent;
+    color: var(--text-dim);
+  }
+  .setup-tab:hover { color: var(--text-secondary); }
+  .setup-tab.active { background: var(--bg); color: var(--text); box-shadow: var(--shadow-sm); }
+  .setup-tab.done { color: var(--accent); }
+  .setup-tab .tab-num {
+    width: 20px; height: 20px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 700;
+    background: var(--bg-muted); color: var(--text-dim);
+  }
+  .setup-tab.active .tab-num {
+    background: rgba(var(--theme-500), 0.15); color: var(--accent);
+  }
+  .setup-tab.done .tab-num {
+    background: rgba(var(--theme-500), 0.1); color: var(--accent);
+  }
+
+  /* Step content area — fixed height prevents layout jump when switching tabs */
+  .setup-content { height: 380px; overflow-y: auto; margin-bottom: 24px; }
+  .setup-content h3 {
+    font-size: 14px; font-weight: 700; margin-bottom: 8px;
+    letter-spacing: -0.01em;
+  }
+  .setup-content > p {
+    font-size: 13px; color: var(--text-muted); line-height: 1.6;
+    margin-bottom: 14px;
+  }
+
+  /* Step nav buttons */
+  .setup-nav {
+    display: flex; align-items: center; justify-content: space-between;
+  }
+
+  .callout {
+    display: flex; gap: 10px;
+    padding: 12px 14px; border-radius: var(--radius-sm);
+    margin-top: 14px;
+  }
+  .callout.info {
+    background: rgba(var(--theme-500), 0.05);
+    border: 1px solid rgba(var(--theme-500), 0.1);
+  }
+  .callout.tip {
+    background: rgba(99,102,241,0.05);
+    border: 1px solid rgba(99,102,241,0.1);
+  }
+  .callout svg { flex-shrink: 0; width: 15px; height: 15px; margin-top: 1px; }
+  .callout.info svg { color: var(--accent); }
+  .callout.tip svg { color: #818cf8; }
+  .callout p { font-size: 12px; color: var(--text-muted); line-height: 1.5; margin: 0; }
+
+  .pipeline-flow {
+    display: flex; align-items: center; gap: 4px;
+    flex-wrap: wrap; margin-top: 14px; padding: 12px;
+    background: rgba(0,0,0,0.2); border-radius: var(--radius-sm);
+    border: 1px solid rgba(255,255,255,0.03);
+  }
+  .pip-stage {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 5px 11px; border-radius: 999px;
+    font-size: 11px; font-weight: 500;
+    background: var(--bg-muted); color: var(--text-secondary);
+    border: 1px solid var(--border-subtle);
+  }
+  .pip-stage .sdot { width: 6px; height: 6px; border-radius: 50%; }
+  .pip-stage:nth-child(1) .sdot { background: #f87171; }
+  .pip-stage:nth-child(3) .sdot { background: #fbbf24; }
+  .pip-stage:nth-child(5) .sdot { background: var(--accent); }
+  .pip-stage:nth-child(7) .sdot { background: #a78bfa; }
+  .pip-arrow { color: var(--text-dimmer); font-size: 11px; }
+
+  .checklist {
+    display: flex; flex-direction: column; gap: 6px; margin-top: 4px;
+  }
+  .checklist-item {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; color: var(--text-muted);
+  }
+  .checklist-item .ci {
+    width: 18px; height: 18px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(var(--theme-500), 0.1);
+    color: var(--accent); font-size: 10px; flex-shrink: 0;
+  }
+
+  .setup-footer {
+    margin-top: 32px; text-align: center;
+    display: flex; flex-direction: column; align-items: center; gap: 12px;
+  }
+
+  /* ══════════════════════════════════════════════
+     PAGE 3: WORKFLOWS EMPTY
+     ══════════════════════════════════════════════ */
+  .wf-page { flex: 1; display: flex; flex-direction: column; }
+
+  .page-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--border-subtle);
+    background: var(--bg-raised);
+  }
+  .page-bar h1 { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+  .page-bar-actions { display: flex; gap: 8px; }
+
+  .empty-state {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 48px 24px; text-align: center;
+  }
+
+  /* Sentry-inspired waiting animation */
+  .waiting-orb {
+    position: relative; width: 88px; height: 88px; margin-bottom: 28px;
+  }
+  .waiting-orb .ring {
+    position: absolute; inset: 0; border-radius: 50%;
+    border: 2px solid rgba(var(--theme-500), 0.1);
+  }
+  .waiting-orb .ring-spin {
+    position: absolute; inset: 0; border-radius: 50%;
+    border: 2px solid transparent;
+    border-top-color: var(--accent);
+    animation: spin 2.5s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .waiting-orb .ring-pulse {
+    position: absolute; inset: -8px; border-radius: 50%;
+    border: 1px solid rgba(var(--theme-500), 0.06);
+    animation: pulse-out 3s ease-in-out infinite;
+  }
+  @keyframes pulse-out {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.08); opacity: 0.5; }
+  }
+  .waiting-orb .center {
+    position: absolute; inset: 16px; border-radius: 50%;
+    background: rgba(var(--theme-500), 0.06);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .waiting-orb .center svg { width: 24px; height: 24px; color: var(--accent); opacity: 0.6; }
+
+  .empty-state h2 { font-size: 17px; font-weight: 700; margin-bottom: 8px; letter-spacing: -0.01em; }
+  .empty-state > p { font-size: 13px; color: var(--text-muted); max-width: 360px; margin-bottom: 28px; line-height: 1.6; }
+
+  .cmd-block {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 18px; border-radius: var(--radius-sm);
+    background: #0c0c10; border: 1px solid var(--border-subtle);
+    margin-bottom: 20px;
+  }
+  .cmd-block .term-icon {
+    width: 28px; height: 28px; border-radius: var(--radius-xs);
+    background: var(--bg-muted);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .cmd-block .term-icon svg { width: 14px; height: 14px; color: var(--text-dim); }
+  .cmd-block code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12.5px; color: var(--text-secondary);
+  }
+  .cmd-block code .hl { color: var(--accent); }
+
+  .empty-actions { display: flex; gap: 10px; }
+
+  /* Sample data card (Grafana-inspired) */
+  .sample-data-card {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 18px; border-radius: var(--radius);
+    background: rgba(99,102,241,0.04);
+    border: 1px solid rgba(99,102,241,0.1);
+    margin-top: 24px; cursor: pointer;
+    transition: all var(--transition);
+    max-width: 380px;
+  }
+  .sample-data-card:hover {
+    background: rgba(99,102,241,0.07);
+    border-color: rgba(99,102,241,0.2);
+  }
+  .sample-data-card svg { width: 18px; height: 18px; color: #818cf8; flex-shrink: 0; }
+  .sample-data-card .sd-text h4 { font-size: 12px; font-weight: 600; color: #c4b5fd; }
+  .sample-data-card .sd-text p { font-size: 11px; color: var(--text-muted); }
+
+  /* ══════════════════════════════════════════════
+     PAGE 4: DETAIL — WAITING
+     ══════════════════════════════════════════════ */
+  .detail-page { flex: 1; display: flex; flex-direction: column; }
+
+  .detail-bar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 20px;
+    border-bottom: 1px solid var(--border-subtle);
+    background: var(--bg-raised);
+  }
+  .icon-btn {
+    width: 28px; height: 28px; border-radius: var(--radius-xs);
+    display: flex; align-items: center; justify-content: center;
+    background: transparent; border: none; color: var(--text-muted);
+    cursor: pointer; transition: all var(--transition);
+  }
+  .icon-btn:hover { background: var(--bg-muted); color: var(--text); }
+  .icon-btn svg { width: 16px; height: 16px; }
+  .detail-bar .crumb { font-size: 12px; color: var(--text-dim); }
+  .detail-bar h1 { font-size: 14px; font-weight: 700; }
+
+  .detail-body { flex: 1; display: flex; overflow: hidden; }
+
+  /* Sidebar */
+  .sidebar {
+    width: 220px; border-right: 1px solid var(--border-subtle);
+    overflow-y: auto; padding: 6px 0;
+    background: var(--bg-raised); flex-shrink: 0;
+  }
+  .sb-section { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dimmer); padding: 14px 16px 6px; }
+  .sb-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 16px; font-size: 12px; color: var(--text-muted);
+    cursor: pointer; transition: all var(--transition);
+  }
+  .sb-item:hover { background: rgba(255,255,255,0.025); color: var(--text-secondary); }
+  .sb-item.active { background: rgba(var(--theme-500), 0.06); color: var(--accent); }
+  .sb-item svg { width: 14px; height: 14px; flex-shrink: 0; opacity: 0.7; }
+  .sb-item .sb-badge {
+    margin-left: auto; font-size: 10px; font-weight: 600;
+    padding: 1px 7px; border-radius: 999px;
+    background: var(--bg-muted); color: var(--text-dim);
+  }
+  .sb-item.active .sb-badge { background: rgba(var(--theme-500), 0.12); color: var(--accent); }
+  .sb-item.disabled { color: var(--text-dimmer); cursor: default; }
+  .sb-item.disabled:hover { background: transparent; color: var(--text-dimmer); }
+
+  /* Main area */
+  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+
+  /* Data Flow Banner */
+  .dfb {
+    display: flex; align-items: stretch;
+    padding: 10px 16px; gap: 0;
+    border-bottom: 1px solid var(--border-subtle);
+    background: var(--bg-raised);
+    flex-shrink: 0;
+  }
+  .dfb-stage {
+    flex: 1; display: flex; flex-direction: column; gap: 3px;
+    padding: 10px 14px; border-radius: var(--radius-sm);
+    transition: all var(--transition); cursor: pointer;
+  }
+  .dfb-stage:hover { background: rgba(255,255,255,0.02); }
+  .dfb-stage.active { background: rgba(var(--theme-500), 0.05); }
+  .dfb-stage .dfb-top { display: flex; align-items: center; gap: 8px; }
+  .dfb-icon {
+    width: 30px; height: 30px; border-radius: var(--radius-xs);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+  }
+  .dfb-icon.i-doc { background: rgba(248,113,113,0.1); }
+  .dfb-icon.i-ext { background: rgba(251,191,36,0.1); }
+  .dfb-icon.i-top { background: rgba(var(--theme-500),0.1); }
+  .dfb-icon.i-rec { background: rgba(var(--theme-400),0.1); }
+  .dfb-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-dim); }
+  .dfb-count { font-size: 17px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+  .dfb-detail { font-size: 10.5px; color: var(--text-dim); padding-left: 38px; }
+  .dfb-arrow { width: 24px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: var(--text-dimmer); }
+  .dfb-arrow svg { width: 14px; height: 14px; }
+
+  /* Shimmer for loading state */
+  .shimmer {
+    background: linear-gradient(90deg, transparent 0%, rgba(var(--theme-500),0.06) 50%, transparent 100%);
+    background-size: 200% 100%;
+    animation: shimmer 2s ease-in-out infinite;
+  }
+  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+  /* Canvas area */
+  .canvas {
+    flex: 1; overflow: auto;
+    background:
+      radial-gradient(circle at 1px 1px, rgba(255,255,255,0.02) 1px, transparent 0);
+    background-size: 24px 24px;
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+  }
+
+  /* Waiting state center */
+  .wait-center {
+    display: flex; flex-direction: column;
+    align-items: center; text-align: center;
+    padding: 48px;
+  }
+  .wait-center h2 { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+  .wait-center > p { font-size: 13px; color: var(--text-muted); max-width: 380px; margin-bottom: 24px; }
+
+  /* Live progress tracker */
+  .live-progress {
+    display: flex; flex-direction: column; gap: 0;
+    width: 320px; margin-bottom: 28px;
+    border-radius: var(--radius); border: 1px solid var(--border-subtle);
+    background: var(--bg-card); overflow: hidden;
+  }
+  .lp-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 16px; font-size: 12.5px;
+    border-bottom: 1px solid var(--border-subtle);
+    transition: all 0.3s;
+  }
+  .lp-item:last-child { border-bottom: none; }
+  .lp-item .lp-icon {
+    width: 22px; height: 22px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; flex-shrink: 0;
+  }
+  .lp-item.done { color: var(--text-secondary); }
+  .lp-item.done .lp-icon { background: rgba(var(--theme-500), 0.15); color: var(--accent); }
+  .lp-item.active { color: var(--accent); font-weight: 500; }
+  .lp-item.active .lp-icon {
+    background: rgba(var(--theme-500), 0.12); color: var(--accent);
+    animation: pulse-icon 2s ease-in-out infinite;
+  }
+  @keyframes pulse-icon { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+  .lp-item.pending { color: var(--text-dim); }
+  .lp-item.pending .lp-icon { background: var(--bg-muted); color: var(--text-dimmer); }
+  .lp-item .lp-time { margin-left: auto; font-size: 10px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+
+  /* W&B-inspired terminal hint */
+  .terminal-hint {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 16px; border-radius: var(--radius-sm);
+    background: rgba(99,102,241,0.04); border: 1px solid rgba(99,102,241,0.1);
+    max-width: 340px;
+  }
+  .terminal-hint svg { width: 16px; height: 16px; color: #818cf8; flex-shrink: 0; }
+  .terminal-hint p { font-size: 11.5px; color: var(--text-muted); }
+  .terminal-hint p strong { color: #c4b5fd; font-weight: 600; }
+
+  /* ══════════════════════════════════════════════
+     PAGE 5: WORKFLOWS WITH DATA
+     ══════════════════════════════════════════════ */
+  .wf-grid { flex: 1; padding: 20px 24px; }
+
+  .wf-card {
+    display: flex; align-items: center;
+    padding: 16px 20px; gap: 16px;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    background: var(--bg-card);
+    margin-bottom: 8px;
+    cursor: pointer; transition: all var(--transition);
+  }
+  .wf-card:hover {
+    border-color: var(--border);
+    background: var(--bg-card-hover);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .wf-card .wf-icon {
+    width: 38px; height: 38px; border-radius: var(--radius-sm);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .wf-card:nth-child(1) .wf-icon { background: rgba(var(--theme-500), 0.08); }
+  .wf-card:nth-child(1) .wf-icon svg { color: var(--accent); }
+  .wf-card:nth-child(2) .wf-icon { background: rgba(99,102,241,0.08); }
+  .wf-card:nth-child(2) .wf-icon svg { color: #818cf8; }
+  .wf-card:nth-child(3) .wf-icon { background: rgba(251,191,36,0.08); }
+  .wf-card:nth-child(3) .wf-icon svg { color: #fbbf24; }
+  .wf-card .wf-icon svg { width: 18px; height: 18px; }
+
+  .wf-info { flex: 1; min-width: 0; }
+  .wf-info h3 { font-size: 13.5px; font-weight: 700; margin-bottom: 4px; letter-spacing: -0.01em; }
+  .wf-meta { display: flex; align-items: center; gap: 10px; font-size: 11.5px; color: var(--text-muted); }
+  .wf-meta .sep { color: var(--text-dimmer); }
+
+  .wf-status {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 12px; border-radius: 999px;
+    font-size: 11px; font-weight: 600;
+    flex-shrink: 0;
+  }
+  .wf-status .s-dot { width: 6px; height: 6px; border-radius: 50%; }
+  .wf-status.s-ready { background: rgba(var(--theme-500), 0.08); color: var(--accent); }
+  .wf-status.s-ready .s-dot { background: var(--accent-muted); }
+  .wf-status.s-training { background: rgba(99,102,241,0.08); color: #a5b4fc; }
+  .wf-status.s-training .s-dot { background: #818cf8; animation: pulse-icon 1.5s ease-in-out infinite; }
+  .wf-status.s-running { background: rgba(251,191,36,0.08); color: #fde68a; }
+  .wf-status.s-running .s-dot { background: #fbbf24; animation: pulse-icon 1.5s ease-in-out infinite; }
+
+  .wf-card .wf-arrow { color: var(--text-dimmer); transition: all var(--transition); }
+  .wf-card:hover .wf-arrow { color: var(--text-muted); transform: translateX(2px); }
+  .wf-card .wf-arrow svg { width: 16px; height: 16px; }
+
+  /* ══════════════════════════════════════════════
+     PAGE 6: DETAIL FULL
+     ══════════════════════════════════════════════ */
+  .canvas-full { flex: 1; overflow: auto; padding: 40px; display: flex; align-items: center; justify-content: center; }
+  .canvas-full {
+    background:
+      radial-gradient(circle at 1px 1px, rgba(255,255,255,0.02) 1px, transparent 0);
+    background-size: 24px 24px;
+  }
+
+  .tree-layout { display: flex; align-items: center; gap: 36px; }
+  .tree-edge { width: 36px; position: relative; }
+  .tree-edge::before { content: ''; position: absolute; top: 50%; left: 0; right: 0; height: 1px; background: var(--border); }
+  .tree-edge::after { content: ''; position: absolute; top: 50%; right: 0; width: 6px; height: 6px; border-radius: 50%; transform: translate(50%,-50%); background: var(--border); }
+
+  .tree-col { display: flex; flex-direction: column; gap: 8px; }
+
+  .t-node {
+    width: 210px; border-radius: var(--radius);
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-card);
+    overflow: hidden; transition: all 0.25s;
+    cursor: pointer;
+  }
+  .t-node:hover { border-color: var(--border-focus); box-shadow: var(--shadow-sm); }
+  .t-node.root {
+    border-color: rgba(var(--theme-500), 0.25);
+    background: linear-gradient(180deg, var(--bg-card) 0%, rgba(var(--theme-500), 0.03) 100%);
+  }
+
+  .t-head { display: flex; align-items: center; gap: 7px; padding: 10px 14px; }
+  .t-head svg { width: 13px; height: 13px; flex-shrink: 0; }
+  .t-head .t-name { flex: 1; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .t-head .t-cnt {
+    font-size: 10px; font-weight: 600; padding: 1px 7px; border-radius: 999px;
+    background: var(--bg-muted); color: var(--text-dim);
+  }
+
+  .t-bar { height: 3px; margin: 0 14px; border-radius: 2px; background: var(--bg-muted); }
+  .t-bar-fill { height: 100%; border-radius: 2px; transition: width 0.5s ease; }
+  .t-bar-fill.g { background: var(--accent-muted); }
+  .t-bar-fill.y { background: #fbbf24; }
+  .t-bar-fill.r { background: #f87171; }
+
+  .t-foot {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 7px 14px 9px; font-size: 10px; color: var(--text-dim);
+  }
+  .t-score { display: flex; align-items: center; gap: 5px; }
+  .t-score .sd { width: 6px; height: 6px; border-radius: 50%; }
+  .t-score .sd.g { background: var(--accent-muted); }
+  .t-score .sd.y { background: #fbbf24; }
+  .t-score .sd.r { background: #f87171; }
+
+  /* Action bar at bottom of detail */
+  .detail-actions {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 24px;
+    border-top: 1px solid var(--border-subtle);
+    background: var(--bg-raised);
+  }
+  .detail-actions .da-info { font-size: 12px; color: var(--text-muted); }
+  .detail-actions .da-info strong { color: var(--text-secondary); }
+
+  /* ══════════════════════════════════════════════
+     Responsive
+     ══════════════════════════════════════════════ */
+  @media (max-width: 768px) {
+    .hiw-grid { grid-template-columns: 1fr; }
+    .alt-pathways { flex-direction: column; }
+    .flow-step span:not(.num) { display: none; }
+    .sidebar { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══ Navigation ═══ -->
+<nav class="flow-nav">
+  <div class="flow-nav-brand">
+    <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/></svg></div>
+    vLLora
+  </div>
+  <div class="nav-divider"></div>
+  <button class="flow-step active" onclick="go('homepage')"><span class="num">1</span> <span>Homepage</span></button>
+  <span class="nav-arrow">›</span>
+  <button class="flow-step" onclick="go('setup')"><span class="num">2</span> <span>Setup</span></button>
+  <span class="nav-arrow">›</span>
+  <button class="flow-step" onclick="go('empty')"><span class="num">3</span> <span>Empty</span></button>
+  <span class="nav-arrow">›</span>
+  <button class="flow-step" onclick="go('waiting')"><span class="num">4</span> <span>Waiting</span></button>
+  <span class="nav-arrow">›</span>
+  <button class="flow-step" onclick="go('list')"><span class="num">5</span> <span>Workflows</span></button>
+  <span class="nav-arrow">›</span>
+  <button class="flow-step" onclick="go('detail')"><span class="num">6</span> <span>Detail</span></button>
+</nav>
+
+<!-- ═══════════════════ PAGE 1: HOMEPAGE ═══════════════════ -->
+<div id="pg-homepage" class="page active">
+  <div class="homepage">
+    <div class="glow-1"></div>
+    <div class="glow-2"></div>
+
+    <div class="hero-badge">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+      Finetune Studio
+    </div>
+
+    <h1 class="hero-title">
+      From idea to<br><span class="gradient">finetuned model</span>
+    </h1>
+    <p class="hero-subtitle">
+      Use the finetune skill with Claude Code or Codex to prepare training data.<br>Visualize, evaluate, and train — all from here.
+    </p>
+
+    <div class="hiw">
+      <div class="hiw-label">How it works</div>
+      <div class="hiw-grid">
+        <div class="hiw-card">
+          <span class="step-label">Step 1</span>
+          <div class="hiw-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+          </div>
+          <h3>Install the Skill</h3>
+          <p>Copy the finetune skill into your project. Works with Claude Code and Codex.</p>
+          <div class="mini-code"><span class="cmd">cp -r</span> <span class="str">finetune-skill/</span> your-project/</div>
+        </div>
+        <div class="hiw-card">
+          <span class="step-label">Step 2</span>
+          <div class="hiw-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+          </div>
+          <h3>Run the Pipeline</h3>
+          <p>The skill extracts docs, builds topics, generates training records, and writes a grader — automatically.</p>
+          <div class="mini-code"><span class="cmd">claude</span> <span class="str">"finetune doc.pdf"</span></div>
+        </div>
+        <div class="hiw-card">
+          <span class="step-label">Step 3</span>
+          <div class="hiw-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
+          </div>
+          <h3>Evaluate & Train</h3>
+          <p>Review topics and records in the UI. Run evaluations, iterate on quality, then train your model.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="cta-row">
+      <button class="btn btn-primary" onclick="go('setup')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        Get Started
+      </button>
+      <button class="btn btn-secondary" onclick="go('list')">I already have workflows</button>
+    </div>
+
+    <div class="divider-row">
+      <div class="divider-line"></div>
+      <span class="divider-text">or start differently</span>
+      <div class="divider-line"></div>
+    </div>
+
+    <div class="alt-pathways">
+      <div class="alt-card" onclick="alert('Route LLM API calls through the vLLora gateway to capture real conversations as training data.')">
+        <div class="alt-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+        </div>
+        <div>
+          <h4>Route existing API calls</h4>
+          <p>Capture real LLM conversations as training data</p>
+        </div>
+      </div>
+      <div class="alt-card" onclick="go('list')">
+        <div class="alt-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+        </div>
+        <div>
+          <h4>View documentation</h4>
+          <p>Learn more about vLLora finetuning</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="trust-row">
+      <div class="trust-label">Similar approach used by</div>
+      <div class="trust-logos">
+        <span>Weights & Biases</span>
+        <span>Sentry</span>
+        <span>Vercel</span>
+        <span>Datadog</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ PAGE 2: SETUP (Tabbed) ═══════════════════ -->
+<div id="pg-setup" class="page">
+  <div class="setup-page">
+    <div class="setup-container">
+      <div class="setup-header">
+        <div class="badge">Getting Started</div>
+        <h1>Set up in 4 steps</h1>
+        <p>Install the skill, run the pipeline, and come back here to evaluate.</p>
+      </div>
+
+      <!-- Tab bar -->
+      <div class="setup-tabs">
+        <button class="setup-tab active" onclick="showSetupStep(0)" id="stab-0">
+          <span class="tab-num">1</span> Prerequisites
+        </button>
+        <button class="setup-tab" onclick="showSetupStep(1)" id="stab-1">
+          <span class="tab-num">2</span> Install Skill
+        </button>
+        <button class="setup-tab" onclick="showSetupStep(2)" id="stab-2">
+          <span class="tab-num">3</span> Run Pipeline
+        </button>
+        <button class="setup-tab" onclick="showSetupStep(3)" id="stab-3">
+          <span class="tab-num">4</span> Evaluate
+        </button>
+      </div>
+
+      <!-- Step 1 -->
+      <div class="setup-content" id="sstep-0">
+        <h3>Install an AI coding assistant</h3>
+        <p>You need Claude Code or Codex to run the finetune skill:</p>
+        <div class="code-block">
+          <button class="copy-btn">Copy</button>
+          <span class="comment"># Claude Code (recommended)</span><br>
+          <span class="cmd">npm install -g</span> <span class="str">@anthropic-ai/claude-code</span><br>
+          <br>
+          <span class="comment"># Or OpenAI Codex</span><br>
+          <span class="cmd">npm install -g</span> <span class="str">@openai/codex</span>
+        </div>
+        <div class="callout info">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+          <p>Make sure the vLLora backend is running at <code style="color:var(--accent)">localhost:9090</code>. Start it with <code style="color:var(--accent)">npm run start:backend</code>.</p>
+        </div>
+      </div>
+
+      <!-- Step 2 -->
+      <div class="setup-content" id="sstep-1" style="display:none">
+        <h3>Copy the skill to your project</h3>
+        <p>The skill tells Claude Code how to run the full finetune pipeline. Copy it into any project where you have documents.</p>
+        <div class="code-block">
+          <button class="copy-btn">Copy</button>
+          <span class="cmd">cp -r</span> <span class="str">vllora/ui/finetune-skill/</span> <span class="str">your-project/.claude/skills/finetune/</span><br>
+          <br>
+          <span class="comment"># Your project structure:</span><br>
+          <span class="comment"># your-project/</span><br>
+          <span class="comment">#   ├── .claude/skills/finetune/  ← skill</span><br>
+          <span class="comment">#   ├── chess-tactics.pdf         ← your document</span><br>
+          <span class="comment">#   └── ...</span>
+        </div>
+      </div>
+
+      <!-- Step 3 -->
+      <div class="setup-content" id="sstep-2" style="display:none">
+        <h3>Run the finetune pipeline</h3>
+        <p>Open a terminal in your project and describe what you want to finetune:</p>
+        <div class="code-block">
+          <button class="copy-btn">Copy</button>
+          <span class="cmd">claude</span> <span class="str">"finetune chess-tactics.pdf as a chess tutor"</span><br>
+          <br>
+          <span class="output"># → Extracting chess-tactics.pdf...</span><br>
+          <span class="output"># → Building 12 topics from document...</span><br>
+          <span class="output"># → Generating 154 training records...</span><br>
+          <span class="output"># → ✓ View at http://localhost:5173/finetune/abc123</span>
+        </div>
+        <div class="pipeline-flow">
+          <span class="pip-stage"><span class="sdot"></span> Extract</span>
+          <span class="pip-arrow">→</span>
+          <span class="pip-stage"><span class="sdot"></span> Topics</span>
+          <span class="pip-arrow">→</span>
+          <span class="pip-stage"><span class="sdot"></span> Records</span>
+          <span class="pip-arrow">→</span>
+          <span class="pip-stage"><span class="sdot"></span> Grader</span>
+        </div>
+        <div class="callout tip">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          <p><strong>Like Weights & Biases</strong> — the CLI prints a direct link to your workflow. Click it to see data in real-time.</p>
+        </div>
+      </div>
+
+      <!-- Step 4 -->
+      <div class="setup-content" id="sstep-3" style="display:none">
+        <h3>Evaluate and train in the UI</h3>
+        <p>Once the skill finishes, your workflow is ready. You can:</p>
+        <div class="checklist">
+          <div class="checklist-item"><span class="ci">✓</span> Browse topics & training records on the canvas</div>
+          <div class="checklist-item"><span class="ci">✓</span> Run evaluations to score data quality</div>
+          <div class="checklist-item"><span class="ci">✓</span> Edit records or regenerate low-quality ones</div>
+          <div class="checklist-item"><span class="ci">✓</span> Start training when quality looks good</div>
+          <div class="checklist-item"><span class="ci">✓</span> Deploy and test your finetuned model</div>
+        </div>
+      </div>
+
+      <!-- Navigation -->
+      <div class="setup-nav">
+        <button class="btn btn-ghost" id="setup-back" onclick="setupNav(-1)">← Home</button>
+        <button class="btn btn-primary" id="setup-next" onclick="setupNav(1)">Next →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ PAGE 3: EMPTY ═══════════════════ -->
+<div id="pg-empty" class="page">
+  <div class="wf-page">
+    <div class="page-bar">
+      <h1>Workflows</h1>
+      <div class="page-bar-actions">
+        <button class="btn btn-ghost" onclick="go('setup')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3M12 17h.01"/></svg>
+          Setup Guide
+        </button>
+      </div>
+    </div>
+    <div class="empty-state">
+      <!-- Sentry-style waiting animation -->
+      <div class="waiting-orb">
+        <div class="ring-pulse"></div>
+        <div class="ring"></div>
+        <div class="ring-spin"></div>
+        <div class="center">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+        </div>
+      </div>
+
+      <h2>Waiting for your first workflow</h2>
+      <p>Run the finetune skill in Claude Code or Codex. Your workflow will appear here automatically when data starts flowing in.</p>
+
+      <div class="cmd-block">
+        <div class="term-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg></div>
+        <code><span class="hl">claude</span> "finetune your-document.pdf"</code>
+      </div>
+
+      <div class="empty-actions">
+        <button class="btn btn-secondary" onclick="go('setup')">View Setup Guide</button>
+        <button class="btn btn-ghost" onclick="go('list')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+          Refresh
+        </button>
+      </div>
+
+      <!-- Grafana-inspired sample data -->
+      <div class="sample-data-card" onclick="go('list')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        <div class="sd-text">
+          <h4>Try with sample data</h4>
+          <p>Explore the UI with a pre-loaded Chess Tutor workflow</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ PAGE 4: WAITING ═══════════════════ -->
+<div id="pg-waiting" class="page">
+  <div class="detail-page">
+    <div class="detail-bar">
+      <button class="icon-btn" onclick="go('empty')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></button>
+      <span class="crumb">Workflows /</span>
+      <h1>Chess Tutor Assistant</h1>
+    </div>
+    <div class="detail-body">
+      <div class="sidebar">
+        <div class="sb-section">Source Documents</div>
+        <div class="sb-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          chess-tactics.pdf
+          <span class="sb-badge">1</span>
+        </div>
+        <div class="sb-section">Training Data</div>
+        <div class="sb-item disabled">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+          <em style="font-size:11px">Waiting for topics...</em>
+        </div>
+        <div class="sb-section">Evaluation</div>
+        <div class="sb-item disabled"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> Not ready yet</div>
+        <div class="sb-section">Training</div>
+        <div class="sb-item disabled"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> Not ready yet</div>
+      </div>
+      <div class="main">
+        <div class="dfb">
+          <div class="dfb-stage">
+            <div class="dfb-top"><div class="dfb-icon i-doc">📄</div><div><div class="dfb-label">Documents</div><div class="dfb-count">1</div></div></div>
+            <div class="dfb-detail">chess-tactics.pdf</div>
+          </div>
+          <div class="dfb-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></div>
+          <div class="dfb-stage shimmer" style="opacity:0.5">
+            <div class="dfb-top"><div class="dfb-icon i-ext">📋</div><div><div class="dfb-label">Extracted</div><div class="dfb-count">—</div></div></div>
+            <div class="dfb-detail">Extracting...</div>
+          </div>
+          <div class="dfb-arrow" style="opacity:0.3"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></div>
+          <div class="dfb-stage" style="opacity:0.3">
+            <div class="dfb-top"><div class="dfb-icon i-top">🏷️</div><div><div class="dfb-label">Topics</div><div class="dfb-count">—</div></div></div>
+            <div class="dfb-detail">Pending</div>
+          </div>
+          <div class="dfb-arrow" style="opacity:0.3"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></div>
+          <div class="dfb-stage" style="opacity:0.3">
+            <div class="dfb-top"><div class="dfb-icon i-rec">💬</div><div><div class="dfb-label">Records</div><div class="dfb-count">—</div></div></div>
+            <div class="dfb-detail">Pending</div>
+          </div>
+        </div>
+        <div class="canvas">
+          <div class="wait-center">
+            <div class="waiting-orb" style="margin-bottom:24px">
+              <div class="ring-pulse"></div>
+              <div class="ring"></div>
+              <div class="ring-spin"></div>
+              <div class="center"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg></div>
+            </div>
+            <h2>Pipeline is running</h2>
+            <p>The finetune skill is processing your documents. Data will appear here as each step completes.</p>
+
+            <div class="live-progress">
+              <div class="lp-item done"><span class="lp-icon">✓</span> Document uploaded <span class="lp-time">0:04</span></div>
+              <div class="lp-item active"><span class="lp-icon">⟳</span> Extracting content... <span class="lp-time">1:23</span></div>
+              <div class="lp-item pending"><span class="lp-icon">○</span> Building topic hierarchy</div>
+              <div class="lp-item pending"><span class="lp-icon">○</span> Generating training records</div>
+              <div class="lp-item pending"><span class="lp-icon">○</span> Writing grader</div>
+            </div>
+
+            <div class="terminal-hint">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+              <p>Check your <strong>Claude Code terminal</strong> for detailed progress and logs</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ PAGE 5: WORKFLOWS LIST ═══════════════════ -->
+<div id="pg-list" class="page">
+  <div class="wf-page">
+    <div class="page-bar">
+      <h1>Workflows</h1>
+      <div class="page-bar-actions">
+        <button class="btn btn-ghost" onclick="go('setup')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3M12 17h.01"/></svg>
+          Setup Guide
+        </button>
+      </div>
+    </div>
+    <div class="wf-grid">
+      <div class="wf-card" onclick="go('detail')">
+        <div class="wf-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"/></svg></div>
+        <div class="wf-info">
+          <h3>Chess Tutor Assistant</h3>
+          <div class="wf-meta"><span>12 topics</span><span class="sep">·</span><span>154 records</span><span class="sep">·</span><span>1 source</span><span class="sep">·</span><span>2h ago</span></div>
+        </div>
+        <div class="wf-status s-ready"><span class="s-dot"></span> Ready to evaluate</div>
+        <div class="wf-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></div>
+      </div>
+      <div class="wf-card">
+        <div class="wf-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></div>
+        <div class="wf-info">
+          <h3>React Performance Optimizer</h3>
+          <div class="wf-meta"><span>8 topics</span><span class="sep">·</span><span>89 records</span><span class="sep">·</span><span>3 sources</span><span class="sep">·</span><span>1d ago</span></div>
+        </div>
+        <div class="wf-status s-training"><span class="s-dot"></span> Training</div>
+        <div class="wf-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></div>
+      </div>
+      <div class="wf-card">
+        <div class="wf-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+        <div class="wf-info">
+          <h3>Financial Report Summarizer</h3>
+          <div class="wf-meta"><span>5 topics</span><span class="sep">·</span><span>42 records</span><span class="sep">·</span><span>2 sources</span><span class="sep">·</span><span>3h ago</span></div>
+        </div>
+        <div class="wf-status s-running"><span class="s-dot"></span> Skill running</div>
+        <div class="wf-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ PAGE 6: DETAIL FULL ═══════════════════ -->
+<div id="pg-detail" class="page">
+  <div class="detail-page">
+    <div class="detail-bar">
+      <button class="icon-btn" onclick="go('list')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></button>
+      <span class="crumb">Workflows /</span>
+      <h1>Chess Tutor Assistant</h1>
+    </div>
+    <div class="detail-body">
+      <div class="sidebar">
+        <div class="sb-section">Source Documents</div>
+        <div class="sb-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> chess-tactics.pdf <span class="sb-badge">19</span></div>
+        <div class="sb-section">Training Data</div>
+        <div class="sb-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg> All Topics <span class="sb-badge">12</span></div>
+        <div class="sb-item" style="padding-left:32px;font-size:11px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/></svg> Basic Tactics <span class="sb-badge">45</span></div>
+        <div class="sb-item" style="padding-left:32px;font-size:11px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/></svg> Sacrifices <span class="sb-badge">32</span></div>
+        <div class="sb-item" style="padding-left:32px;font-size:11px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/></svg> Endgames <span class="sb-badge">28</span></div>
+        <div class="sb-section">Evaluation</div>
+        <div class="sb-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> Run Evaluation <span class="sb-badge" style="background:rgba(var(--theme-500),0.12);color:var(--accent)">Ready</span></div>
+        <div class="sb-section">Training</div>
+        <div class="sb-item disabled"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> Evaluate first</div>
+      </div>
+      <div class="main">
+        <div class="dfb">
+          <div class="dfb-stage">
+            <div class="dfb-top"><div class="dfb-icon i-doc">📄</div><div><div class="dfb-label">Documents</div><div class="dfb-count">1</div></div></div>
+            <div class="dfb-detail">chess-tactics.pdf · 45 pages</div>
+          </div>
+          <div class="dfb-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></div>
+          <div class="dfb-stage">
+            <div class="dfb-top"><div class="dfb-icon i-ext">📋</div><div><div class="dfb-label">Extracted</div><div class="dfb-count">19</div></div></div>
+            <div class="dfb-detail">19 knowledge parts</div>
+          </div>
+          <div class="dfb-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></div>
+          <div class="dfb-stage active">
+            <div class="dfb-top"><div class="dfb-icon i-top">🏷️</div><div><div class="dfb-label">Topics</div><div class="dfb-count" style="color:var(--accent)">12</div></div></div>
+            <div class="dfb-detail">4 categories · 12 leaf topics</div>
+          </div>
+          <div class="dfb-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></div>
+          <div class="dfb-stage">
+            <div class="dfb-top"><div class="dfb-icon i-rec">💬</div><div><div class="dfb-label">Records</div><div class="dfb-count">154</div></div></div>
+            <div class="dfb-detail">154 training records</div>
+          </div>
+        </div>
+        <div class="canvas-full">
+          <div class="tree-layout">
+            <!-- Root -->
+            <div class="t-node root">
+              <div class="t-head">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent)"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"/></svg>
+                <span class="t-name" style="color:var(--accent)">Chess Tutor</span>
+              </div>
+              <div class="t-foot"><span>154 records</span><span>12 topics</span></div>
+            </div>
+            <div class="tree-edge"></div>
+            <!-- Categories -->
+            <div class="tree-col">
+              <div class="t-node">
+                <div class="t-head"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/></svg><span class="t-name">Basic Tactics</span><span class="t-cnt">45</span></div>
+                <div class="t-bar"><div class="t-bar-fill g" style="width:85%"></div></div>
+                <div class="t-foot"><span class="t-score"><span class="sd g"></span> 0.87</span><span>3 sources</span></div>
+              </div>
+              <div class="t-node">
+                <div class="t-head"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/></svg><span class="t-name">Sacrifices</span><span class="t-cnt">32</span></div>
+                <div class="t-bar"><div class="t-bar-fill y" style="width:62%"></div></div>
+                <div class="t-foot"><span class="t-score"><span class="sd y"></span> 0.64</span><span>2 sources</span></div>
+              </div>
+              <div class="t-node">
+                <div class="t-head"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/></svg><span class="t-name">Endgames</span><span class="t-cnt">28</span></div>
+                <div class="t-bar"><div class="t-bar-fill r" style="width:35%"></div></div>
+                <div class="t-foot"><span class="t-score"><span class="sd r"></span> 0.38</span><span>1 source</span></div>
+              </div>
+            </div>
+            <div class="tree-edge"></div>
+            <!-- Leaf topics -->
+            <div class="tree-col">
+              <div class="t-node">
+                <div class="t-head"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/></svg><span class="t-name">Forks</span><span class="t-cnt">18</span></div>
+                <div class="t-bar"><div class="t-bar-fill g" style="width:91%"></div></div>
+                <div class="t-foot"><span class="t-score"><span class="sd g"></span> 0.91</span><span>2 sources</span></div>
+              </div>
+              <div class="t-node">
+                <div class="t-head"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/></svg><span class="t-name">Pins & Skewers</span><span class="t-cnt">15</span></div>
+                <div class="t-bar"><div class="t-bar-fill g" style="width:82%"></div></div>
+                <div class="t-foot"><span class="t-score"><span class="sd g"></span> 0.82</span><span>2 sources</span></div>
+              </div>
+              <div class="t-node">
+                <div class="t-head"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/></svg><span class="t-name">Discovered Attacks</span><span class="t-cnt">16</span></div>
+                <div class="t-bar"><div class="t-bar-fill y" style="width:71%"></div></div>
+                <div class="t-foot"><span class="t-score"><span class="sd y"></span> 0.71</span><span>1 source</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="detail-actions">
+          <div class="da-info"><strong>154</strong> records across <strong>12</strong> topics — <strong>Ready to evaluate</strong></div>
+          <button class="btn btn-primary" style="padding:8px 18px;font-size:12px">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            Run Evaluation
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const pages = ['homepage','setup','empty','waiting','list','detail'];
+function go(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('pg-' + id).classList.add('active');
+  const idx = pages.indexOf(id);
+  document.querySelectorAll('.flow-step').forEach((b, i) => {
+    b.classList.remove('active','visited');
+    if (i === idx) b.classList.add('active');
+    else if (i < idx) b.classList.add('visited');
+  });
+  window.scrollTo(0, 0);
+}
+
+// Setup page tabbed steps
+let currentSetupStep = 0;
+function showSetupStep(idx) {
+  currentSetupStep = idx;
+  for (let i = 0; i < 4; i++) {
+    const content = document.getElementById('sstep-' + i);
+    const tab = document.getElementById('stab-' + i);
+    if (content) content.style.display = i === idx ? 'block' : 'none';
+    if (tab) {
+      tab.classList.remove('active', 'done');
+      if (i === idx) tab.classList.add('active');
+      else if (i < idx) tab.classList.add('done');
+    }
+  }
+  // Update nav buttons
+  const backBtn = document.getElementById('setup-back');
+  const nextBtn = document.getElementById('setup-next');
+  if (backBtn) backBtn.textContent = idx === 0 ? '← Home' : '← Back';
+  if (nextBtn) {
+    nextBtn.textContent = idx === 3 ? 'View My Workflows →' : 'Next →';
+  }
+}
+function setupNav(dir) {
+  if (dir === -1 && currentSetupStep === 0) { go('homepage'); return; }
+  if (dir === 1 && currentSetupStep === 3) { go('empty'); return; }
+  showSetupStep(currentSetupStep + dir);
+}
+</script>
+
+</body>
+</html>

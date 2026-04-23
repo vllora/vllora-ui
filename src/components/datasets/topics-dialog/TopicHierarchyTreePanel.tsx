@@ -1,0 +1,178 @@
+/**
+ * TopicHierarchyTreePanel
+ *
+ * Left panel of TopicHierarchyDialog showing searchable topic tree.
+ */
+
+import { useState, useMemo } from "react";
+import { Input } from "@/components/ui/input";
+import { Search, Plus, Sparkles, MessageSquare, ChevronDown } from "lucide-react";
+import { TopicHierarchyNode } from "@/types/dataset-types";
+import { TopicTreeNode } from "./TopicTreeNode";
+import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
+import { TraceAnalysisConsumer } from "@/contexts/TraceAnalysisContext";
+import { resolveTopicSystemPrompt } from "@/lib/distri-finetune-tools/steps/shared/topic-system-prompt";
+
+export interface TopicHierarchyTreePanelProps {
+  hierarchy: TopicHierarchyNode[];
+  searchQuery: string;
+  onSearchChange: (query: string) => void;
+  expandedNodes: Set<string>;
+  onToggleNode: (nodeId: string) => void;
+  onUpdateName: (nodeId: string, newName: string) => void;
+  onAddChild: (parentId: string) => void;
+  onDelete: (nodeId: string) => void;
+  onAddRootTopic: () => void;
+  maxDepth: number;
+  topicCounts?: Map<string, number>;
+}
+
+export function TopicHierarchyTreePanel({
+  hierarchy,
+  searchQuery,
+  onSearchChange,
+  expandedNodes,
+  onToggleNode,
+  onUpdateName,
+  onAddChild,
+  onDelete,
+  onAddRootTopic,
+  maxDepth,
+  topicCounts,
+}: TopicHierarchyTreePanelProps) {
+  const { dataset } = DatasetDetailConsumer();
+  const { getTopicMetrics } = TraceAnalysisConsumer();
+  const datasetObjective = dataset?.datasetObjective || '';
+  const normalizedObjective = dataset?.normalizedObjective;
+  const [showPromptPreview, setShowPromptPreview] = useState(false);
+
+  // Collect leaf topics with full paths and segments for system prompt preview
+  const leafTopics = useMemo(() => {
+    const leaves: { name: string; path: string[]; promptTemplate?: string; normalizedSegments: (string | undefined)[] }[] = [];
+    const collect = (nodes: TopicHierarchyNode[], parentPath: string[], parentSegments: (string | undefined)[]) => {
+      for (const node of nodes) {
+        const currentPath = [...parentPath, node.name];
+        const currentSegments = [...parentSegments, node.normalizedPromptSegment];
+        if (node.children && node.children.length > 0) {
+          collect(node.children, currentPath, currentSegments);
+        } else {
+          leaves.push({ name: node.name, path: currentPath, promptTemplate: node.promptTemplate, normalizedSegments: currentSegments });
+        }
+      }
+    };
+    collect(hierarchy, [], []);
+    return leaves;
+  }, [hierarchy]);
+
+  // Filter hierarchy based on search query
+  const filteredHierarchy = useMemo(() => {
+    if (!searchQuery.trim()) return hierarchy;
+    const query = searchQuery.toLowerCase();
+
+    const filterNodes = (nodes: TopicHierarchyNode[]): TopicHierarchyNode[] => {
+      const result: TopicHierarchyNode[] = [];
+      for (const node of nodes) {
+        const matchesSearch = node.name.toLowerCase().includes(query);
+        const filteredChildren = node.children ? filterNodes(node.children) : [];
+
+        if (matchesSearch || filteredChildren.length > 0) {
+          result.push({
+            ...node,
+            children: filteredChildren.length > 0 ? filteredChildren : node.children,
+          });
+        }
+      }
+      return result;
+    };
+
+    return filterNodes(hierarchy);
+  }, [hierarchy, searchQuery]);
+
+  return (
+    <div className="w-1/2 flex flex-col border-r border-border">
+      {/* Search input and add button */}
+      <div className="p-4 border-b border-border flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            value={searchQuery}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder="Search hierarchy..."
+            className="pl-9 bg-muted/30 border-border/50"
+          />
+        </div>
+        <button
+          onClick={onAddRootTopic}
+          className="shrink-0 flex items-center gap-1.5 px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-md transition-colors"
+          title="Create Manual Root Topic"
+        >
+          <Plus className="w-4 h-4" />
+          <span className="hidden sm:inline">Add Topic</span>
+        </button>
+      </div>
+
+      {/* Tree view */}
+      <div className="flex-1 overflow-y-auto p-4">
+        {filteredHierarchy.length > 0 ? (
+          <div className="space-y-1">
+            {filteredHierarchy.map((node, index) => (
+              <TopicTreeNode
+                key={node.id}
+                node={node}
+                level={0}
+                maxDepth={maxDepth}
+                expandedNodes={expandedNodes}
+                toggleNode={onToggleNode}
+                onUpdateName={onUpdateName}
+                onAddChild={onAddChild}
+                onDelete={onDelete}
+                topicCounts={topicCounts}
+                getTraceMetrics={getTopicMetrics}
+                isLast={index === filteredHierarchy.length - 1}
+              />
+            ))}
+          </div>
+        ) : searchQuery ? (
+          <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+            <Search className="w-10 h-10 text-muted-foreground/30 mb-3" />
+            <p className="text-sm">No topics match "{searchQuery}"</p>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+            <div className="w-16 h-16 rounded-2xl bg-muted/50 flex items-center justify-center mb-4">
+              <Sparkles className="w-8 h-8 text-muted-foreground/40" />
+            </div>
+            <p className="text-sm font-medium">No hierarchy yet</p>
+            <p className="text-xs mt-1 text-muted-foreground/70">Generate with AI or add topics manually</p>
+          </div>
+        )}
+      </div>
+
+      {/* System Prompt Preview — collapsible footer */}
+      {leafTopics.length > 0 && datasetObjective && (
+        <div className="border-t border-border">
+          <button
+            className="w-full flex items-center gap-2 px-4 py-2 text-xs text-muted-foreground hover:bg-muted/30 transition-colors"
+            onClick={() => setShowPromptPreview(!showPromptPreview)}
+          >
+            <ChevronDown className={`w-3 h-3 transition-transform ${showPromptPreview ? '' : '-rotate-90'}`} />
+            <MessageSquare className="w-3 h-3" />
+            <span>System Prompt Preview ({leafTopics.length} topics)</span>
+          </button>
+          {showPromptPreview && (
+            <div className="px-4 pb-3 max-h-[200px] overflow-y-auto space-y-2">
+              {leafTopics.map((leaf) => (
+                <div key={leaf.name} className="text-[11px] space-y-0.5">
+                  <div className="font-medium text-foreground/80">{leaf.name}</div>
+                  <div className="font-mono text-muted-foreground/70 leading-tight bg-muted/30 rounded px-2 py-1">
+                    {resolveTopicSystemPrompt(leaf.path, datasetObjective, undefined, leaf.promptTemplate, normalizedObjective, leaf.normalizedSegments)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

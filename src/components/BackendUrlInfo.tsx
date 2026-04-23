@@ -72,7 +72,7 @@ export function BackendUrlInfo() {
       <DialogContent className="sm:max-w-lg">
         <DialogHeader className="space-y-3">
           <div className="flex items-center gap-2">
-            <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-[rgb(var(--theme-500))]/10">
+            <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-[rgba(var(--theme-500),0.1)]">
               <Link2 className="w-5 h-5 text-[rgb(var(--theme-500))]" />
             </div>
             <DialogTitle className="text-xl">Base URL</DialogTitle>

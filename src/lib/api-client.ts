@@ -1,6 +1,13 @@
 import { getBackendUrl } from '@/config/api';
 import { tryParseJson } from '@/utils/modelUtils';
 
+/** Gateway returns timestamps without timezone (e.g. "2026-03-18 09:55:18").
+ *  These are UTC — append 'Z' so Date parses them correctly. */
+export function parseUtcTimestamp(ts: string): number {
+  const normalized = ts.endsWith('Z') || ts.includes('+') ? ts : `${ts}Z`;
+  return new Date(normalized).getTime();
+}
+
 /**
  * Type for the token provider function
  * Returns a token string or null if no authentication is needed
@@ -51,12 +58,10 @@ export async function apiClient(
   options: RequestInit = {}
 ): Promise<Response> {
   const apiUrl = getBackendUrl();
-  let url = `${apiUrl}${endpoint}`;
+  const url = `${apiUrl}${endpoint}`;
 
   // Build headers object
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
+  const headers: Record<string, string> = {};
 
   // Add authentication token if provider is configured
   if (globalTokenProvider) {
@@ -77,11 +82,16 @@ export async function apiClient(
     Object.assign(headers, customHeaders);
   }
 
-  // Make the request
-  const response = await fetch(url, {
-    ...options,
-    headers,
-  });
+  // Default to JSON only when caller did not provide Content-Type and body is not multipart.
+  // Browser must set multipart boundaries for FormData requests.
+  const hasContentTypeHeader = Object.keys(headers).some(
+    (k) => k.toLowerCase() === 'content-type'
+  );
+  if (!hasContentTypeHeader && !(options.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  const response = await fetch(url, { ...options, headers });
   return response;
 }
 
@@ -123,13 +133,26 @@ export const api = {
 };
 
 /**
+ * API error with HTTP status code for downstream handling (e.g., 404 detection).
+ */
+export class ApiError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
+/**
  * Helper to parse JSON response and handle errors
  */
 export async function handleApiResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const error = await response.text();
     const errorJson = tryParseJson(error)
-    throw new Error(errorJson?.error || errorJson.message || error || `API request failed with status ${response.status}`);
+    throw new ApiError(
+      errorJson?.error || errorJson?.message || error || `API request failed with status ${response.status}`,
+      response.status,
+    );
   }
 
   // Handle empty responses (e.g., 204 No Content or empty body)

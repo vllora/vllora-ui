@@ -2,14 +2,13 @@ import { useState, useMemo } from "react"
 import { Link, useLocation, useNavigate } from "react-router"
 import {
   Home,
-  MessageSquare,
   Settings,
   Menu,
+  FlaskConical,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { ProjectsConsumer } from "@/contexts/ProjectContext"
-import { SidebarAgentButton } from "@/components/agent/SidebarAgentButton"
 import {
   Tooltip,
   TooltipContent,
@@ -19,7 +18,10 @@ import {
 
 const mainMenuItems = [
   { id: "home", label: "Home", icon: Home, path: "/" },
-  { id: "chat", label: "Chat", icon: MessageSquare, path: "/chat" },
+  // Old chat / spans-trace route hidden — vLLora is skill-first now. The
+  // OTel GenAI trace browser lives at /traces (see src/pages/traces/).
+  { id: "finetune", label: "Finetune", icon: FlaskConical, path: "/finetune" },
+  // { id: "otel-traces", label: "OTel Traces", icon: Waypoints, path: "/otel-traces" },
 ]
 
 const bottomMenuItems = [
@@ -136,8 +138,6 @@ export function AppSidebar({ isCollapsed, currentProjectId }: AppSidebarProps) {
 
         <div className="border-t border-border/40 p-4">
           <ul className="space-y-1.5">
-            {/* AI Assistant button - only in side-panel mode */}
-            <SidebarAgentButton isCollapsed={isCollapsed} />
             {bottomMenuItems.map((item) => {
               const Icon = item.icon
               const isActive = location.pathname === item.path

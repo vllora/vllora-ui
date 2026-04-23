@@ -3,14 +3,29 @@ import { RefreshCw, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useNavigate } from 'react-router';
+import { SelectModeToggle } from '../SelectModeToggle';
 
 interface TraceListHeaderProps {
   onRefresh: () => void;
   isLoading: boolean;
   threadId?: string;
+  isSelectModeEnabled?: boolean;
+  onToggleSelectMode?: () => void;
+  selectedCount?: number;
+  totalCount?: number;
+  onSelectAll?: () => void;
 }
 
-export const TraceListHeader: React.FC<TraceListHeaderProps> = ({ onRefresh, isLoading, threadId }) => {
+export const TraceListHeader: React.FC<TraceListHeaderProps> = ({
+  onRefresh,
+  isLoading,
+  threadId,
+  isSelectModeEnabled,
+  onToggleSelectMode,
+  selectedCount = 0,
+  totalCount = 0,
+  onSelectAll,
+}) => {
   const navigate = useNavigate();
 
   const handleViewInTracesTab = () => {
@@ -23,6 +38,16 @@ export const TraceListHeader: React.FC<TraceListHeaderProps> = ({ onRefresh, isL
     <div className="h-16 px-4 border-b border-border flex items-center justify-between bg-card/95 backdrop-blur-xl flex-shrink-0">
       <h2 className="text-sm font-semibold text-foreground">Traces</h2>
       <div className="flex items-center gap-1">
+        {/* Select mode toggle button */}
+        {onToggleSelectMode && (
+          <SelectModeToggle
+            isEnabled={isSelectModeEnabled || false}
+            onToggle={onToggleSelectMode}
+            selectedCount={selectedCount}
+            totalCount={totalCount}
+            onSelectAll={onSelectAll}
+          />
+        )}
         {threadId && (
           <TooltipProvider delayDuration={300}>
             <Tooltip>

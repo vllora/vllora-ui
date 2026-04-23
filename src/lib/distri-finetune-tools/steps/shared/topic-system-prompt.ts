@@ -1,0 +1,822 @@
+/**
+ * Topic System Prompt Builder
+ *
+ * Constructs a shared system prompt for all records within a topic,
+ * derived from the topic's position in the hierarchy tree.
+ *
+ * Key principle: ONE system prompt per topic, variation lives in user messages.
+ * Child topic prompts INHERIT parent context — the full hierarchy path
+ * is expressed as progressively narrowing sentences that read naturally.
+ *
+ * The path is grouped into pairs, each pair forming one sentence with
+ * varied connectors ("particularly", "especially", "specifically").
+ * This keeps every sentence short while showing the full structure.
+ *
+ * Examples:
+ *   Depth 2: "You are a chess tutor. You specialize in chess fundamentals,
+ *             particularly openings. Provide clear explanations..."
+ *
+ *   Depth 4: "You are a chess tutor. You specialize in chess, particularly
+ *             openings. Your focus is on indian defense, especially kings
+ *             indian. Provide clear explanations..."
+ *
+ *   Depth 6: "You are a chess tutor. You specialize in chess, particularly
+ *             openings. Your focus is on indian defense, especially kings
+ *             indian. Your primary expertise is in classical, specifically
+ *             petrosian. Provide clear explanations..."
+ *
+ * Inheritance: deeper prompts contain shallower prompts as a prefix —
+ * e.g. the depth-4 prompt is the first two sentences of the depth-6 prompt.
+ */
+
+import { callLucy } from './lucy-client';
+
+/**
+ * Convert a snake_case topic name to human-readable text.
+ * e.g. "progressive_chess_rules" → "progressive chess rules"
+ */
+function humanize(s: string): string {
+  return s.replace(/_/g, ' ');
+}
+
+/**
+ * Heuristic fallback: naively prepend "You are " to objectives that don't
+ * already start with it. Works for noun-phrase objectives ("a chess tutor")
+ * but breaks for verb-phrase ones ("Train a chess tutor").
+ *
+ * Used as fallback when no LLM-normalized role is available.
+ */
+function heuristicNormalize(trainingObjective: string): string {
+  const trimmed = trainingObjective.trim().replace(/\.$/, '');
+  return trimmed.toLowerCase().startsWith('you are')
+    ? trimmed
+    : `You are ${trimmed.charAt(0).toLowerCase()}${trimmed.slice(1)}`;
+}
+
+/**
+ * Extract the role description (without "You are " prefix) from a training
+ * objective using heuristic normalization. Used for template variable context.
+ */
+function heuristicExtractRole(trainingObjective: string): string {
+  const trimmed = trainingObjective.trim().replace(/\.$/, '');
+  return trimmed.toLowerCase().startsWith('you are')
+    ? trimmed.slice(8).trim()
+    : `${trimmed.charAt(0).toLowerCase()}${trimmed.slice(1)}`;
+}
+
+/** Sentence starters that progressively narrow the scope */
+const PAIR_PREFIXES = [
+  'You specialize in',
+  'Your focus is on',
+  'Your primary expertise is in',
+];
+
+/** Connectors within each pair that vary to avoid repetition */
+const PAIR_CONNECTORS = [
+  ', particularly ',
+  ', especially ',
+  ', specifically ',
+];
+
+/**
+ * Build a shared system prompt for a specific topic based on its
+ * position in the hierarchy and the dataset's training objective.
+ *
+ * The hierarchy path is expressed as progressively narrowing sentences,
+ * so child prompts naturally contain all parent context as a prefix.
+ *
+ * @param topicPath - Full path from root to leaf topic (snake_case names)
+ * @param trainingObjective - The dataset's training objective text
+ * @param descriptions - Optional descriptions for each topic in the path (parallel array)
+ * @returns A system prompt string shared by all records in this topic
+ */
+export function buildTopicSystemPrompt(
+  topicPath: string[],
+  trainingObjective: string,
+  descriptions?: (string | undefined)[],
+  normalizedRole?: string,
+  normalizedSegments?: (string | undefined)[],
+): string {
+  // If ALL normalized segments are present, use natural concatenation
+  if (
+    normalizedSegments &&
+    normalizedSegments.length === topicPath.length &&
+    normalizedSegments.every((s): s is string => s != null)
+  ) {
+    const role = normalizedRole
+      ? normalizedRole.trim().replace(/\.$/, '')
+      : heuristicNormalize(trainingObjective);
+    const parts = [`${role}.`, ...normalizedSegments];
+    parts.push('Provide clear explanations, relevant examples, and practical guidance.');
+    return parts.join(' ');
+  }
+
+  // Fallback to PAIR-based heuristic
+  const path = topicPath.map(humanize);
+
+  // Use pre-normalized role if available, otherwise fall back to heuristic
+  const role = normalizedRole
+    ? normalizedRole.trim().replace(/\.$/, '')
+    : heuristicNormalize(trainingObjective);
+
+  // Helper: get description suffix for a topic at given index
+  const descSuffix = (idx: number) => {
+    const desc = descriptions?.[idx];
+    return desc ? ` — ${desc.replace(/\.$/, '')}` : '';
+  };
+
+  // Group path into pairs → each pair becomes one narrowing sentence
+  const sentences: string[] = [`${role}.`];
+
+  for (let i = 0; i < path.length; i += 2) {
+    const pairIdx = Math.floor(i / 2);
+    const prefix = PAIR_PREFIXES[pairIdx % PAIR_PREFIXES.length];
+    const connector = PAIR_CONNECTORS[pairIdx % PAIR_CONNECTORS.length];
+    const first = path[i] + descSuffix(i);
+
+    if (i + 1 < path.length) {
+      // Full pair: "You specialize in X, particularly Y."
+      sentences.push(`${prefix} ${first}${connector}${path[i + 1]}${descSuffix(i + 1)}.`);
+    } else {
+      // Odd one out: "Your focus is on X."
+      sentences.push(`${prefix} ${first}.`);
+    }
+  }
+
+  sentences.push('Provide clear explanations, relevant examples, and practical guidance.');
+  return sentences.join(' ');
+}
+
+/**
+ * Get the system prompt "segment" that a single topic node contributes.
+ *
+ * Used in the canvas view to show how the full prompt builds up
+ * incrementally as you traverse the hierarchy from root to leaf.
+ *
+ * @param nodeName - The snake_case name of this topic node
+ * @param depth - 0-based depth in the hierarchy (0 = top-level topic)
+ * @returns The text fragment this node contributes to the cumulative prompt
+ *
+ * @example
+ *   // depth 0 (top-level): pair start
+ *   getTopicPromptSegment('culinary_fundamentals', 0)
+ *   // → 'You specialize in culinary fundamentals'
+ *
+ *   // depth 1 (second level): pair connector
+ *   getTopicPromptSegment('knife_skills', 1)
+ *   // → 'particularly knife skills.'
+ *
+ *   // depth 2 (third level): new pair start
+ *   getTopicPromptSegment('julienne_technique', 2)
+ *   // → 'Your focus is on julienne technique'
+ */
+export function getTopicPromptSegment(
+  nodeName: string,
+  depth: number,
+  normalizedSegment?: string,
+): string {
+  if (normalizedSegment) return normalizedSegment;
+
+  const name = humanize(nodeName);
+  const pairIdx = Math.floor(depth / 2);
+  const isSecondInPair = depth % 2 === 1;
+
+  if (isSecondInPair) {
+    // This node is the second in a pair — returns the connector fragment
+    const connector = PAIR_CONNECTORS[pairIdx % PAIR_CONNECTORS.length];
+    return `${connector.trimStart()}${name}.`;
+  } else {
+    // This node starts a new pair — returns the prefix fragment
+    const prefix = PAIR_PREFIXES[pairIdx % PAIR_PREFIXES.length];
+    return `${prefix} ${name}`;
+  }
+}
+
+/**
+ * Get the role sentence derived from the training objective.
+ * Used on root/dataset nodes in the canvas to show what "You are ..." resolves to.
+ *
+ * @param trainingObjective - The dataset's training objective text
+ * @returns The normalized role sentence (e.g. "You are a cooking instructor.")
+ */
+export function getRoleSentence(trainingObjective: string, normalizedRole?: string): string {
+  const role = normalizedRole
+    ? normalizedRole.trim().replace(/\.$/, '')
+    : heuristicNormalize(trainingObjective);
+  return `${role}.`;
+}
+
+// ─── Structured segment types (for "sentence grammar" visualization) ───
+
+/** Structured parts of a single node's prompt segment (template + variable name) */
+export interface PromptSegmentParts {
+  template: string;   // e.g., "You specialize in " or ", particularly "
+  topicName: string;  // e.g., "culinary fundamentals" or "knife skills"
+  suffix: string;     // e.g., "" or "."
+}
+
+/** Semantic section that a prompt segment belongs to */
+export type PromptSemanticSection = 'role' | 'specialization' | 'instruction';
+
+/** A tagged piece of the full accumulated prompt (for color-coded rendering) */
+export interface PromptTextSegment {
+  text: string;
+  type: 'template' | 'topicName' | 'currentTopicName' | 'goal';
+  /** Optional semantic section for annotated visualization */
+  semantic?: PromptSemanticSection;
+  /** For topic names: 0-based index in the topic path (for hierarchy visualization) */
+  topicDepth?: number;
+}
+
+/**
+ * Get the structured parts of a single node's prompt segment.
+ * Used for color-coded rendering: template in dim gray, topic name in accent color.
+ *
+ * @param nodeName - The snake_case name of this topic node
+ * @param depth - 0-based depth in the hierarchy
+ * @returns Structured parts: { template, topicName, suffix }
+ */
+export function getTopicPromptSegmentParts(
+  nodeName: string,
+  depth: number,
+  normalizedSegment?: string,
+): PromptSegmentParts {
+  if (normalizedSegment) {
+    return { template: '', topicName: normalizedSegment, suffix: '' };
+  }
+
+  const name = humanize(nodeName);
+  const pairIdx = Math.floor(depth / 2);
+  const isSecondInPair = depth % 2 === 1;
+
+  if (isSecondInPair) {
+    const connector = PAIR_CONNECTORS[pairIdx % PAIR_CONNECTORS.length];
+    return { template: connector.trimStart(), topicName: name, suffix: '.' };
+  } else {
+    const prefix = PAIR_PREFIXES[pairIdx % PAIR_PREFIXES.length];
+    return { template: `${prefix} `, topicName: name, suffix: '' };
+  }
+}
+
+/**
+ * Get the structured parts of the role sentence (for root/dataset nodes).
+ * Used for color-coded rendering: "You are" in dim, role description in accent.
+ *
+ * @param trainingObjective - The dataset's training objective text
+ * @returns Structured parts: { template: "You are ", topicName: "...", suffix: "." }
+ */
+export function getRoleSentenceParts(trainingObjective: string, normalizedRole?: string): PromptSegmentParts {
+  if (normalizedRole) {
+    const trimmed = normalizedRole.trim().replace(/\.$/, '');
+    // Normalized role is always "You are ...", so strip the prefix for the topicName part
+    if (trimmed.toLowerCase().startsWith('you are')) {
+      return { template: 'You are ', topicName: trimmed.slice(8), suffix: '.' };
+    }
+    return { template: '', topicName: trimmed, suffix: '.' };
+  }
+  const trimmed = trainingObjective.trim().replace(/\.$/, '');
+  if (trimmed.toLowerCase().startsWith('you are')) {
+    return { template: 'You are ', topicName: trimmed.slice(8), suffix: '.' };
+  }
+  return {
+    template: 'You are ',
+    topicName: `${trimmed.charAt(0).toLowerCase()}${trimmed.slice(1)}`,
+    suffix: '.',
+  };
+}
+
+/**
+ * Build the full accumulated prompt as structured segments for color-coded rendering.
+ * Each topic name is tagged so it can be highlighted, with the current node's name
+ * getting extra emphasis via the 'currentTopicName' type. The training objective is
+ * tagged as 'goal' so the UI can highlight it distinctly.
+ *
+ * @param topicPath - Full path from root to current topic (snake_case names)
+ * @param currentNodeName - The current node's snake_case name (for emphasis)
+ * @param trainingObjective - The dataset's training objective text
+ * @param descriptions - Optional descriptions for each topic in the path (parallel array)
+ * @returns Array of tagged text segments
+ */
+export function buildAccumulatedPromptSegments(
+  topicPath: string[],
+  currentNodeName: string,
+  trainingObjective: string,
+  descriptions?: (string | undefined)[],
+  normalizedRole?: string,
+  normalizedSegments?: (string | undefined)[],
+): PromptTextSegment[] {
+  const currentName = humanize(currentNodeName);
+  const segments: PromptTextSegment[] = [];
+
+  // Role sentence: "You are [goal/training objective]."
+  const roleParts = getRoleSentenceParts(trainingObjective, normalizedRole);
+  segments.push({ text: roleParts.template, type: 'template', semantic: 'role' });
+  segments.push({ text: roleParts.topicName, type: 'goal', semantic: 'role' });
+  segments.push({ text: `${roleParts.suffix} `, type: 'template', semantic: 'role' });
+
+  // If ALL normalized segments are present, emit one segment per node
+  if (
+    normalizedSegments &&
+    normalizedSegments.length === topicPath.length &&
+    normalizedSegments.every((s): s is string => s != null)
+  ) {
+    for (let i = 0; i < normalizedSegments.length; i++) {
+      const name = humanize(topicPath[i]);
+      segments.push({
+        text: normalizedSegments[i],
+        type: name === currentName ? 'currentTopicName' : 'topicName',
+        semantic: 'specialization',
+        topicDepth: i,
+      });
+      segments.push({ text: ' ', type: 'template', semantic: 'specialization' });
+    }
+
+    segments.push({
+      text: 'Provide clear explanations, relevant examples, and practical guidance.',
+      type: 'template',
+      semantic: 'instruction',
+    });
+    return segments;
+  }
+
+  // Fallback: PAIR-based heuristic segments
+  const path = topicPath.map(humanize);
+
+  // Helper: get description suffix for a topic at given index
+  const descSuffix = (idx: number) => {
+    const desc = descriptions?.[idx];
+    return desc ? ` — ${desc.replace(/\.$/, '')}` : '';
+  };
+
+  // Topic sentences — grouped into pairs
+  for (let i = 0; i < path.length; i += 2) {
+    const pairIdx = Math.floor(i / 2);
+    const prefix = PAIR_PREFIXES[pairIdx % PAIR_PREFIXES.length];
+    const connector = PAIR_CONNECTORS[pairIdx % PAIR_CONNECTORS.length];
+    const first = path[i] + descSuffix(i);
+
+    // Prefix: "You specialize in "
+    segments.push({ text: `${prefix} `, type: 'template', semantic: 'specialization' });
+    // First topic name + description (tagged with its depth in the hierarchy)
+    segments.push({
+      text: first,
+      type: path[i] === currentName ? 'currentTopicName' : 'topicName',
+      semantic: 'specialization',
+      topicDepth: i,
+    });
+
+    if (i + 1 < path.length) {
+      // Connector + second topic: ", particularly [name — desc]."
+      segments.push({ text: connector, type: 'template', semantic: 'specialization' });
+      segments.push({
+        text: path[i + 1] + descSuffix(i + 1),
+        type: path[i + 1] === currentName ? 'currentTopicName' : 'topicName',
+        semantic: 'specialization',
+        topicDepth: i + 1,
+      });
+      segments.push({ text: '. ', type: 'template', semantic: 'specialization' });
+    } else {
+      // Odd one out — already has description appended above
+      segments.push({ text: '. ', type: 'template', semantic: 'specialization' });
+    }
+  }
+
+  // Closing instruction sentence
+  segments.push({
+    text: 'Provide clear explanations, relevant examples, and practical guidance.',
+    type: 'template',
+    semantic: 'instruction',
+  });
+
+  return segments;
+}
+
+/**
+ * Build a generic system prompt when no topic hierarchy is available.
+ *
+ * @param trainingObjective - The dataset's training objective text
+ * @returns A generic system prompt string
+ */
+export function buildGenericSystemPrompt(trainingObjective: string, normalizedRole?: string): string {
+  const role = normalizedRole
+    ? normalizedRole.trim().replace(/\.$/, '')
+    : heuristicNormalize(trainingObjective);
+  return `${role}. Provide clear, helpful, and accurate responses.`;
+}
+
+// ─── Custom template support ───────────────────────────────────────────────
+
+/** Standard closing instruction used in default prompts */
+const CLOSING_INSTRUCTION = 'Provide clear explanations, relevant examples, and practical guidance.';
+
+/** A single template variable with its key, display label, and type */
+export interface TemplateVariable {
+  key: string;
+  label: string;
+  description: string;
+  type: 'objective' | 'topic' | 'leaf_topic';
+}
+
+/**
+ * Build template variables dynamically from the topic path.
+ * Each topic in the path becomes its own `{{topic_name}}` variable,
+ * plus `{{objective}}` for the training objective.
+ *
+ * @param topicPath - Full path from root to leaf (snake_case names)
+ * @param descriptions - Optional descriptions parallel to topicPath
+ * @returns Array of template variables matching the hierarchy structure
+ */
+export function buildTemplateVariables(
+  topicPath: string[],
+  descriptions?: (string | undefined)[],
+): TemplateVariable[] {
+  const vars: TemplateVariable[] = [
+    { key: 'objective', label: 'objective', description: 'Dataset training objective', type: 'objective' },
+  ];
+
+  topicPath.forEach((name, i) => {
+    const humanName = humanize(name);
+    const isLeaf = i === topicPath.length - 1;
+    const desc = descriptions?.[i];
+    vars.push({
+      key: name,
+      label: humanName,
+      description: desc ? `${humanName} — ${desc.replace(/\.$/, '')}` : humanName,
+      type: isLeaf ? 'leaf_topic' : 'topic',
+    });
+  });
+
+  return vars;
+}
+
+/**
+ * Build the default template string that mirrors the pair-grouping algorithm.
+ * Each topic in the path becomes a `{{topic_name}}` placeholder, with
+ * structural connectors as plain editable text.
+ *
+ * Example for path ["fen_position_analysis", "material_evaluation"]:
+ *   "You are {{objective}}. You specialize in {{fen_position_analysis}},
+ *    particularly {{material_evaluation}}. Provide clear explanations,
+ *    relevant examples, and practical guidance."
+ *
+ * @param topicPath - Full path from root to leaf (snake_case names)
+ * @returns Template string with {{variable}} placeholders
+ */
+export function buildDefaultTemplate(topicPath: string[]): string {
+  const sentences: string[] = ['You are {{objective}}.'];
+
+  for (let i = 0; i < topicPath.length; i += 2) {
+    const pairIdx = Math.floor(i / 2);
+    const prefix = PAIR_PREFIXES[pairIdx % PAIR_PREFIXES.length];
+    const connector = PAIR_CONNECTORS[pairIdx % PAIR_CONNECTORS.length];
+    const first = `{{${topicPath[i]}}}`;
+
+    if (i + 1 < topicPath.length) {
+      sentences.push(`${prefix} ${first}${connector}{{${topicPath[i + 1]}}}.`);
+    } else {
+      sentences.push(`${prefix} ${first}.`);
+    }
+  }
+
+  sentences.push('Provide clear explanations, relevant examples, and practical guidance.');
+  return sentences.join(' ');
+}
+
+/**
+ * Build narrowing prose from ancestor topics (everything except the leaf).
+ * Reuses the same pair-grouping algorithm as buildTopicSystemPrompt but
+ * only for the ancestor portion of the path.
+ *
+ * @param ancestorPath - Humanized ancestor topic names (excludes the leaf)
+ * @param descriptions - Optional descriptions parallel to the ancestor path
+ * @returns Narrowing sentences, e.g. "You specialize in chess, particularly openings."
+ */
+export function buildAncestorSpecialization(
+  ancestorPath: string[],
+  descriptions?: (string | undefined)[],
+  normalizedSegments?: (string | undefined)[],
+): string {
+  if (ancestorPath.length === 0) return '';
+
+  // If all ancestor segments are present, concatenate them
+  if (
+    normalizedSegments &&
+    normalizedSegments.length === ancestorPath.length &&
+    normalizedSegments.every((s): s is string => s != null)
+  ) {
+    return normalizedSegments.join(' ');
+  }
+
+  const descSuffix = (idx: number) => {
+    const desc = descriptions?.[idx];
+    return desc ? ` — ${desc.replace(/\.$/, '')}` : '';
+  };
+
+  const sentences: string[] = [];
+  for (let i = 0; i < ancestorPath.length; i += 2) {
+    const pairIdx = Math.floor(i / 2);
+    const prefix = PAIR_PREFIXES[pairIdx % PAIR_PREFIXES.length];
+    const connector = PAIR_CONNECTORS[pairIdx % PAIR_CONNECTORS.length];
+    const first = ancestorPath[i] + descSuffix(i);
+
+    if (i + 1 < ancestorPath.length) {
+      sentences.push(`${prefix} ${first}${connector}${ancestorPath[i + 1]}${descSuffix(i + 1)}.`);
+    } else {
+      sentences.push(`${prefix} ${first}.`);
+    }
+  }
+
+  return sentences.join(' ');
+}
+
+/**
+ * Build the template variable context for custom template interpolation.
+ *
+ * Each topic in the path becomes a variable keyed by its snake_case name,
+ * resolving to "humanized name" or "humanized name — description" if present.
+ * The `objective` variable resolves to the training objective description
+ * (without the "You are" prefix, since "You are" is plain text in templates).
+ *
+ * Also includes backward-compat keys (role, topic, ancestor_specialization, etc.)
+ * so older templates continue to work.
+ *
+ * @param topicPath - Full path from root to leaf (snake_case)
+ * @param trainingObjective - Dataset training objective
+ * @param descriptions - Optional descriptions parallel to topicPath
+ * @returns Record of variable name → resolved value
+ */
+export function buildTemplateContext(
+  topicPath: string[],
+  trainingObjective: string,
+  descriptions?: (string | undefined)[],
+  normalizedRole?: string,
+  normalizedSegments?: (string | undefined)[],
+): Record<string, string> {
+  const humanPath = topicPath.map(humanize);
+  const leafIndex = humanPath.length - 1;
+
+  // Objective: strip "You are " prefix since template has "You are " as plain text
+  let objective: string;
+  if (normalizedRole) {
+    const trimmed = normalizedRole.trim().replace(/\.$/, '');
+    objective = trimmed.toLowerCase().startsWith('you are')
+      ? trimmed.slice(8).trim()
+      : trimmed;
+  } else {
+    objective = heuristicExtractRole(trainingObjective);
+  }
+
+  const descSuffix = (idx: number) => {
+    const desc = descriptions?.[idx];
+    return desc ? ` — ${desc.replace(/\.$/, '')}` : '';
+  };
+
+  const context: Record<string, string> = { objective };
+
+  // Each topic in the path gets its own variable, keyed by snake_case name
+  topicPath.forEach((name, i) => {
+    context[name] = humanPath[i] + descSuffix(i);
+  });
+
+  // Backward compat: keep old variable names for existing templates
+  const ancestorPath = humanPath.slice(0, leafIndex);
+  const ancestorDescs = descriptions?.slice(0, leafIndex);
+  context.role = getRoleSentence(trainingObjective, normalizedRole);
+  context.topic = humanPath[leafIndex] ?? '';
+  context.topic_description = descriptions?.[leafIndex]?.replace(/\.$/, '') ?? '';
+  context.topic_path = humanPath.join(' › ');
+  context.parent_topic = leafIndex > 0 ? humanPath[leafIndex - 1] : '';
+  context.root_topic = humanPath[0] ?? '';
+  const ancestorSegments = normalizedSegments?.slice(0, leafIndex);
+  context.ancestor_specialization = buildAncestorSpecialization(ancestorPath, ancestorDescs, ancestorSegments);
+  context.closing = CLOSING_INSTRUCTION;
+
+  // Natural prompt: full prompt built from normalized segments (if all present)
+  if (
+    normalizedSegments &&
+    normalizedSegments.length === topicPath.length &&
+    normalizedSegments.every((s): s is string => s != null)
+  ) {
+    context.natural_prompt = buildTopicSystemPrompt(topicPath, trainingObjective, descriptions, normalizedRole, normalizedSegments);
+  }
+
+  return context;
+}
+
+/**
+ * Interpolate a custom template string with the given context.
+ * Replaces {{variable}} placeholders with their values.
+ * Unknown variables are replaced with empty string.
+ */
+function interpolateTemplate(template: string, context: Record<string, string>): string {
+  return template.replace(/\{\{(\w+)\}\}/g, (_, key) => context[key] ?? '');
+}
+
+/**
+ * Resolve a topic's system prompt, supporting custom templates.
+ *
+ * If customTemplate is provided, interpolates it with template variables.
+ * Otherwise, delegates to the built-in buildTopicSystemPrompt algorithm.
+ *
+ * @param topicPath - Full path from root to leaf topic (snake_case names)
+ * @param trainingObjective - The dataset's training objective text
+ * @param descriptions - Optional descriptions for each topic in the path
+ * @param customTemplate - Optional custom mustache template
+ * @returns The resolved system prompt string
+ */
+export function resolveTopicSystemPrompt(
+  topicPath: string[],
+  trainingObjective: string,
+  descriptions?: (string | undefined)[],
+  customTemplate?: string,
+  normalizedRole?: string,
+  normalizedSegments?: (string | undefined)[],
+): string {
+  if (!customTemplate) {
+    return buildTopicSystemPrompt(topicPath, trainingObjective, descriptions, normalizedRole, normalizedSegments);
+  }
+
+  const context = buildTemplateContext(topicPath, trainingObjective, descriptions, normalizedRole, normalizedSegments);
+  const hasVariables = /\{\{\w+\}\}/.test(customTemplate);
+
+  if (!hasVariables) {
+    // Plain text mode — use as the complete prompt (no interpolation)
+    return customTemplate;
+  }
+
+  return interpolateTemplate(customTemplate, context);
+}
+
+// ─── LLM-based topic segment normalization ──────────────────────────────────
+
+import type { TopicHierarchyNode } from '@/types/dataset-types';
+
+/**
+ * Walk a topic hierarchy BFS (parent before children, siblings in parallel chunks)
+ * and generate a natural `normalizedPromptSegment` for each node via LLM.
+ *
+ * Each segment is one sentence describing the specialization this node adds,
+ * building on the accumulated context of its ancestors.
+ *
+ * Returns a **new** hierarchy (immutable) with `normalizedPromptSegment` populated.
+ * Skips nodes that already have a segment.
+ *
+ * @param hierarchy - The root-level topic nodes
+ * @param trainingObjective - Dataset training objective
+ * @param normalizedRole - Optional LLM-normalized "You are ..." role sentence
+ * @returns New hierarchy with segments populated
+ */
+export async function normalizeTopicSegments(
+  hierarchy: TopicHierarchyNode[],
+  trainingObjective: string,
+  normalizedRole?: string,
+): Promise<TopicHierarchyNode[]> {
+  const role = normalizedRole
+    ? normalizedRole.trim().replace(/\.$/, '')
+    : heuristicNormalize(trainingObjective);
+
+  // BFS queue: each item carries accumulated context from ancestors
+  interface QueueItem {
+    node: TopicHierarchyNode;
+    ancestorContext: string;
+    parentRef: TopicHierarchyNode[] | undefined;
+    indexInParent: number;
+  }
+
+  // Deep-clone hierarchy to avoid mutation
+  const result: TopicHierarchyNode[] = JSON.parse(JSON.stringify(hierarchy));
+
+  // Build BFS queue from the cloned tree
+  const queue: QueueItem[] = [];
+  const enqueue = (nodes: TopicHierarchyNode[], ancestorContext: string) => {
+    for (let i = 0; i < nodes.length; i++) {
+      queue.push({
+        node: nodes[i],
+        ancestorContext,
+        parentRef: nodes,
+        indexInParent: i,
+      });
+    }
+  };
+
+  enqueue(result, `${role}.`);
+
+  // Process BFS level-by-level: parent segments must be set before children
+  while (queue.length > 0) {
+    // Take all items at the current level
+    const currentLevel = queue.splice(0, queue.length);
+
+    // Process siblings in parallel chunks of 3
+    const CHUNK_SIZE = 3;
+    for (let chunkStart = 0; chunkStart < currentLevel.length; chunkStart += CHUNK_SIZE) {
+      const chunk = currentLevel.slice(chunkStart, chunkStart + CHUNK_SIZE);
+
+      const promises = chunk.map(async (item) => {
+        // Skip if already has a segment
+        if (item.node.normalizedPromptSegment) return;
+
+        const topicName = humanize(item.node.name);
+        const description = item.node.description || '';
+
+        const messages = [
+          {
+            role: 'system' as const,
+            content:
+              'You generate a single natural English sentence that narrows the specialization of an AI assistant to a specific topic. The sentence builds on the context already established. Return ONLY the sentence ending with a period. Do not repeat what the context already says.',
+          },
+          {
+            role: 'user' as const,
+            content: `Context so far:\n"${item.ancestorContext}"\n\nTopic name: ${topicName}${description ? `\nTopic description: ${description}` : ''}\n\nGenerate one sentence that narrows the assistant's specialization to this topic.`,
+          },
+        ];
+
+        try {
+          const segment = await callLucy(messages, {
+            temperature: 0,
+            label: 'normalize_topic_segment',
+          });
+          item.node.normalizedPromptSegment = segment.trim();
+        } catch {
+          // Leave segment undefined — fallback to heuristic
+        }
+      });
+
+      await Promise.all(promises);
+    }
+
+    // Enqueue children of all current-level nodes
+    for (const item of currentLevel) {
+      if (item.node.children && item.node.children.length > 0) {
+        const childContext = item.node.normalizedPromptSegment
+          ? `${item.ancestorContext} ${item.node.normalizedPromptSegment}`
+          : item.ancestorContext;
+        enqueue(item.node.children, childContext);
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Walk a hierarchy following a topic path and collect `normalizedPromptSegment`
+ * from each node along the way.
+ *
+ * @param hierarchy - The root-level topic nodes
+ * @param topicPath - Path of snake_case topic names from root to leaf
+ * @returns Array parallel to `topicPath` with segments (undefined if missing)
+ */
+export function extractNormalizedSegments(
+  hierarchy: TopicHierarchyNode[],
+  topicPath: string[],
+): (string | undefined)[] {
+  const segments: (string | undefined)[] = [];
+  let currentLevel = hierarchy;
+
+  for (const name of topicPath) {
+    const node = currentLevel.find((n) => n.name === name);
+    if (!node) {
+      // Path doesn't match hierarchy — fill rest with undefined
+      segments.push(...new Array(topicPath.length - segments.length).fill(undefined));
+      break;
+    }
+    segments.push(node.normalizedPromptSegment);
+    currentLevel = node.children || [];
+  }
+
+  return segments;
+}
+
+// ─── LLM-based objective normalization ──────────────────────────────────────
+
+/**
+ * Use a quick LLM call to normalize a free-form training objective into
+ * a natural "You are ..." role sentence. Called once when the objective
+ * is first set/updated, and the result is cached on the dataset.
+ *
+ * If the objective already starts with "You are", it passes through unchanged.
+ *
+ * @param objective - The raw training objective text
+ * @returns A "You are ..." role sentence
+ */
+export async function normalizeObjectiveToRole(objective: string): Promise<string> {
+  const trimmed = objective.trim();
+  if (!trimmed) return trimmed;
+
+  // Skip LLM call if already well-formed
+  if (trimmed.toLowerCase().startsWith('you are')) {
+    return trimmed;
+  }
+
+  const messages = [
+    {
+      role: 'system' as const,
+      content:
+        'Convert the given training objective into a natural "You are ..." role description for an AI assistant. Return ONLY the converted sentence, nothing else. Keep the full meaning intact.',
+    },
+    { role: 'user' as const, content: trimmed },
+  ];
+
+  const result = await callLucy(messages, { temperature: 0, label: 'normalize_objective' });
+  return result.trim();
+}

@@ -9,37 +9,42 @@ import { Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface LucyAvatarProps {
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'xs' | 'sm' | 'md' | 'lg';
   className?: string;
   animated?: boolean;
   showBadge?: boolean;
 }
 
 const sizeClasses = {
+  xs: 'w-3.5 h-3.5',
   sm: 'w-6 h-6',
   md: 'w-8 h-8',
   lg: 'w-12 h-12',
 };
 
 const borderClasses = {
+  xs: 'ring-[0.5px]',
   sm: 'ring-[0.5px]',
   md: 'ring-1',
   lg: 'ring-[1.5px]',
 };
 
 const auraClasses = {
-  sm: 'shadow-[0_0_8px_2px_rgba(16,185,129,0.4)]',
-  md: 'shadow-[0_0_12px_3px_rgba(16,185,129,0.4)]',
-  lg: 'shadow-[0_0_20px_5px_rgba(16,185,129,0.35)]',
+  xs: '',
+  sm: 'shadow-[0_0_8px_2px_rgba(var(--theme-500),0.4)]',
+  md: 'shadow-[0_0_12px_3px_rgba(var(--theme-500),0.4)]',
+  lg: 'shadow-[0_0_20px_5px_rgba(var(--theme-500),0.35)]',
 };
 
 const badgeSizeClasses = {
+  xs: 'w-2 h-2 -bottom-0.5 -right-0.5',
   sm: 'w-2.5 h-2.5 -bottom-0.5 -right-0.5',
   md: 'w-3 h-3 -bottom-0.5 -right-0.5',
   lg: 'w-4 h-4 bottom-0 right-0',
 };
 
 const badgeIconClasses = {
+  xs: 'w-1 h-1',
   sm: 'w-1.5 h-1.5',
   md: 'w-2 h-2',
   lg: 'w-2.5 h-2.5',
@@ -50,7 +55,7 @@ export function LucyAvatar({ size = 'md', className, animated = false, showBadge
     <div className={cn('relative inline-block', className)}>
       <div
         className={cn(
-          'rounded-full overflow-hidden ring-emerald-500 bg-zinc-900',
+          'rounded-full overflow-hidden ring-[rgb(var(--theme-500))] bg-zinc-900',
           sizeClasses[size],
           borderClasses[size],
           auraClasses[size],
@@ -66,11 +71,11 @@ export function LucyAvatar({ size = 'md', className, animated = false, showBadge
       {showBadge && (
         <div
           className={cn(
-            'absolute flex items-center justify-center rounded-full bg-zinc-900 ring-1 ring-emerald-500',
+            'absolute flex items-center justify-center rounded-full bg-zinc-900 ring-1 ring-[rgb(var(--theme-500))]',
             badgeSizeClasses[size]
           )}
         >
-          <Zap className={cn('text-emerald-400 fill-emerald-400', badgeIconClasses[size])} />
+          <Zap className={cn('text-[rgb(var(--theme-400))] fill-[rgb(var(--theme-400))]', badgeIconClasses[size])} />
         </div>
       )}
     </div>

@@ -1,0 +1,1361 @@
+# How the Finetune Skill Works — Pipeline Overview
+
+This document explains the full skill pipeline step by step, what happens at each stage, what files are produced, what APIs are called, and how long each step typically takes. Use this to understand what the skill agent is doing at any point during execution.
+
+## Pipeline at a Glance
+
+```
+Step 1: Define Objective          (~1 min)    → workflow created, input mode detected  ↑ uploaded
+Step 2A: Extract Documents        (~5-15 min) → per-document knowledge parts         ↑ uploaded
+Step 2C: Analyze Traces (combined)(~30 sec)   → trace-analysis/ (4 artifacts)        ↑ uploaded
+Step 3: Build Topic Hierarchy     (~3-5 min)  → filter parts, topics, relations      ↑ uploaded
+Step 4: Generate Training Data    (~5-20 min) → training.jsonl (trace-weighted)      ↑ uploaded
+  or 4B: NeMo Data Designer      (optional)  → NeMo server + convert                ↑ uploaded
+Step 5: Write Grader              (~2-3 min)  → quality-checker/grader.js            ↑ uploaded
+Step 5.5: Validate + Quality Gate (~1-3 min)  → pre-eval data validation             (local)
+Step 6: Verify & Hand Off         (~30 sec)   → confirm all data in gateway DB
+─────────────────────────────────────────────────────────────────────────────────────────────
+Step 7: Eval → Readiness Gate → Train  (~30-90 min) → eval-first, then train   ↑ cloud
+Step 8: Analyze Results           (~5-10 min) → eval + training analysis
+Step 9: Iterate (If Needed)       (~30-60 min)→ eval-only or post-training fixes
+```
+
+### Dependency Graph
+
+```
+Step 1: Define Objective + Detect Input Mode (PDF / traces / combined)
+    ↓
+Step 2A: Extract Documents (parallel subagents per PDF)
+Step 2C: Analyze Traces (combined mode — runs in parallel with 2A)
+         → trace-analysis/priority.json, topics.json, prompts.json, grader-hints.json
+    ↓ [GATE: validate_extraction + verify gateway upload]
+Step 3: Build Topic Hierarchy (enriched with trace topics in combined mode)
+    ├── 3a: Filter parts by relevance (relevant: true/false on each part)
+    ├── 3b: Design skill-based topics (NOT document structure)
+    ├── 3c: Write behavioral system prompt segments
+    ├── 3d: Build topic-part relations (relation-builder subagent)
+    └── 3e: Agent reads source material to verify topic coverage, overlap, balance, relations
+    ↓ [Upload: topics + relations + relevance labels]
+    │
+    ↓ (SEQUENTIAL — Step 5 needs sample records from Step 4)
+    Step 4: Generate Records (default — generate_records.py)
+         or Step 4B: NeMo Data Designer (optional — requires NeMo server)
+    ↓
+    Step 5: Write Grader
+              ↓ [GATE: dry-run hand-crafted + live (needs records uploaded)]
+Step 4e: Agent reads records from every topic to verify GT consistency, factual accuracy, vocabulary
+Step 5.5: validate_dataset.py [GATE]
+Step 5.5b: data_quality_gate.py [GATE: includes GT distribution diversity checks]
+Step 5.5c: Agent checks GT self-consistency (verdict matches evidence)
+Step 5.1 Test 3: Agent thinks through adversarial grader exploits
+Step 6: Verify
+    ↓
+Step 7: Evaluate → Readiness Gate → Headroom Gate → Train
+    ├── 7b: Eval base model (4B default)
+    ├── 7c: Readiness gate (4 hard + soft checks, per-topic dead zone, signal density)
+    ├── 7c+: Difficulty probe
+    ├── 7c++: Harden records (if signal density warning — generate harder variants of trivials)
+    ├── 7d: Headroom gate → if avg > 0.75: eval smaller model → choose best headroom → train
+    └── 7e: Training + monitor
+Step 8: Analyze Results
+Step 9: Iterate (If Needed)
+```
+
+### Data Flow: Relevance Filtering Through the Pipeline
+
+```
+Step 2: Extract → parts-index.json (relevant: null)
+Step 3a: Filter → all-parts-index.json (relevant: true/false) → uploaded to gateway
+Step 3d: Relations → only relevant:true parts linked to topics
+Step 4: generate_records.py → only relevant parts (filtered in Step 3a)
+                            → curated context from relations (Step 3d) — NOT augmented with RAG
+                            → --enrich-sources: re-queries with generated question for per-record source_parts
+                            → each record gets per-record source_parts (1-3 parts)
+                            → alternative: --rag-only mode skips relations, uses gateway search
+Step 4B: NeMo → ⚠️ rag-retrieval does NOT filter by relevance (known limitation)
+                → convert_nemo_rows.py recovers source_parts via gateway search
+```
+
+> **GRPO research context**: The SKILL.md includes a "Research Context: This is GRPO, Not SFT" section near the top. GRPO (Group Relative Policy Optimization) has fundamentally different expectations from SFT — low base model scores are expected and desirable, dead-weight prompts are normal, and eval K=1 scores are lower bounds. See that section before interpreting any pipeline metrics.
+
+**Auto-journal**: Pipeline steps auto-log to `pipeline-journal.json` via `_auto_journal()` in `finetune.py`. Commands that auto-journal: `create-eval`, `poll-eval`, `estimate-training`, `create-training`, `poll-training`, `readiness-check`, `difficulty-probe`, `data-quality-gate`. Each entry records the command, timestamp, exit code, and key outputs — useful for debugging and iteration tracking.
+
+**Each step uploads to the gateway immediately** via `scripts/finetune.py` — the vLLora UI shows progress in real time. There is no final "push" step; Step 6 just verifies everything landed correctly.
+
+**Steps 1-6** prepare the dataset (including the data quality gate at Step 5.5b). **Steps 7-9** evaluate and train the model. All steps run by default — do NOT stop at Step 6. If the user only asks for data preparation, you may stop at Step 6, but by default run the full pipeline including evaluation and training.
+
+### NeMo Data Designer Flow (Step 4B — Optional)
+
+When NeMo server is running at `localhost:8000`:
+
+```
+topics.json + system-prompt
+         ↓
+  materialize_seed.py (NeMo repo)
+         ↓
+  curated-seed.parquet
+  ├── topic, topic_name, topic_path
+  ├── composed_system_prompt  (root + ancestors + leaf — NOT LLM-generated)
+  └── expected_difficulty     (from topic metadata)
+         ↓
+  NeMo server (localhost:8000)
+  ├── POST /seed/upload-curated     → upload parquet
+  ├── POST /seed/inspect-curated    → preview rows
+  └── POST /jobs                    → submit recipe job
+         ↓
+  Recipe column pipeline:
+  ┌─────────────────────────────────────────────────────────────────┐
+  │ 1. rag-retrieval (topic_path → gateway search → chunks)       │
+  │ 2. topic_context = expression(topic_path)  [seed passthrough]  │
+  │ 3. difficulty = expression(expected_difficulty) [from seed]     │
+  │ 4. raw_question = llm-text (grounded in retrieved_chunks)      │ drop:true
+  │ 5. question_chunks = rag-retrieval (raw_question → search)     │ drop:true
+  │ 6. system_prompt = expression(composed_system_prompt) [seed]   │
+  │ 7. user_message = llm-text (refine raw_question + chunks)      │
+  │ 8. reference_answer = llm-text (answer from chunks)            │
+  │ 9. judge_answerable = llm-judge (binary: can answer from ctx?) │
+  │ 10. judge_groundedness = llm-judge (0/0.5/1 grounding score)   │
+  │ 11. judge_specificity = llm-judge (domain terms present?)      │
+  │ 12. score_relevancy = rag-relevancy (Jaccard overlap)          │
+  └─────────────────────────────────────────────────────────────────┘
+         ↓
+  Preview job (10 rows) → review → Full job (target count)
+         ↓
+  GET /jobs/{id}/dataset → nemo-dataset.json
+         ↓
+  convert_nemo_rows.py
+  ├── --min-answerable 1.0 --min-groundedness 0.75 --min-specificity 0.75
+  ├── --ground-truth-field reference_answer
+  ├── --workflow-id $WF  → recovers source_parts via gateway search
+  └── filters by judge scores, maps to training.jsonl format
+         ↓
+  data_quality_gate.py (format/structure checks — complements judge columns)
+         ↓
+  validate_dataset.py --nemo
+         ↓
+  upload-records → gateway
+```
+
+**Key differences from Step 4:**
+- `system_prompt` is an expression passthrough from seed (consistent per topic), NOT LLM-generated per row
+- `difficulty` comes from seed `expected_difficulty`, NOT random sampling
+- `source_parts` are recovered post-generation via gateway search (approximate), NOT tagged per-record during generation
+- NeMo's `rag-retrieval` does NOT filter by `relevant: true/false` labels (known limitation)
+- Judge columns filter quality at generation time; `data_quality_gate.py` still needed for format/structure checks
+
+Total: ~20-45 minutes for Steps 1-6 with 3 documents and 100+ records.
+
+## Helper Scripts
+
+All gateway API calls go through `scripts/finetune.py` — a single wrapper script with subcommands:
+
+| Command | Step | What it does |
+|---------|------|-------------|
+| `finetune.py create-workflow` | 1 | Creates workflow, prints workflow ID |
+| `finetune.py upload-knowledge` | 2 | Uploads document + extracted parts |
+| `finetune.py upload-topics` | 3 | Uploads topic hierarchy |
+| `finetune.py upload-relations` | 3 | Uploads topic-to-part mappings |
+| `finetune.py upload-records` | 4 | Transforms JSONL → gateway format, uploads in batches |
+| `finetune.py upload-grader` | 5 | Validates syntax, runs dry-run on sample records, then uploads JavaScript grader script |
+| `finetune.py verify` | 6 | Checks all data landed in gateway DB |
+| `finetune.py status` | any | Full workflow status: gateway data + checkpoint + jobs + next step |
+| `finetune.py create-eval` | 7b | Creates evaluation job, saves metadata locally |
+| `finetune.py poll-eval` | 7b | Polls eval job until complete, saves results |
+| `finetune.py readiness-check` | 7c | Checks if eval results pass pre-training readiness gate (4 hard + soft checks) |
+| `finetune.py estimate-training` | 7b+ | Estimates cost/duration for multiple models in one call; flags models exceeding `config.json` constraints |
+| `finetune.py create-training` | 7d | Creates training job, saves metadata locally; pre-flight constraint check warns if limits exceeded |
+| `finetune.py poll-training` | 7e | Polls training job until complete, saves status + metrics. Auto-prints a progression table every 5 minutes showing epoch, metrics, and trends |
+| `finetune.py sync-jobs` | 8 | Syncs training + eval jobs from gateway to local tracking files |
+| `finetune.py diagnose-grader` | 9a/9c | Diagnose grader issues: score buckets, reason patterns, grader source, record context check. Classifies zeros into parsing failures / wrong answers / refusals — tells agent whether to fix GRADER or RECORDS. Also includes response pattern analysis (dominant model response patterns, over-prediction from reason fields) and **per-topic classification** (`DEAD_WEIGHT`, `AMBIGUOUS`, `WEAK`, `HARD_BUT_LEARNING`, `OK`) based on score variance. |
+| `finetune.py filter-records` | 9a | Remove bad records from local JSONL + gateway based on eval scores/reasons. Supports `--max-score`, `--reason-pattern`, `--topic` filters. |
+| `finetune.py log-iteration` | 8e | Log eval or training iteration to `iterations.json` with structured metrics + delta comparison vs previous iteration. Eval entries include **per-topic metrics** (avg_score, zero_rate, score_std per topic) and flag `stalled_topics`. |
+| `finetune.py data-quality-gate` | 5.5b | Run pre-eval data quality gate (structural, diversity, completion length, **source accuracy**, GT quality, alignment) |
+| `finetune.py difficulty-probe` | 7c+ | Post-eval difficulty distribution probe (signal prediction, grader granularity) |
+| `finetune.py cancel-training` | 7e | Cancel a running training job |
+| `finetune.py delete-knowledge` | — | Delete knowledge source(s) from a workflow |
+| `finetune.py print-row-outputs` | 8 | Print epoch table for one row: rollout output, score, reason |
+| `finetune.py log-step` | any | Log a pipeline step to `execution-log.md` + `pipeline-journal.json` |
+| `finetune.py upload-knowledge` | 2 | Upload a knowledge source + parts (listed above) |
+| `finetune.py test-grader` | 5 | Adversarial grader test — feeds wrong answers to detect leniency before eval |
+| `finetune.py harden-records` | 7c++ | Generate harder variants of trivial records (score > 0.85) to improve GRPO signal density |
+| `finetune.py reconcile-topics` | 4+ | Detect and fix topic↔GT mismatches after GT derivation (`--apply` to write) |
+| `finetune.py grader-sanity-check` | 7b+/8 | MANDATORY after every eval — hard-fail on collapse/gaming/inference bugs |
+| `finetune.py diagnose-clipping` | 8 | Diagnose root cause of completion clipping after auto-cancel (config / grader drift / spec mismatch) |
+| `finetune.py cancel-eval` | 7b | Cancel a running evaluation |
+| `finetune.py search-knowledge` | any | Semantic search over knowledge parts |
+| `finetune.py update-part-relevance` | 3 | Update parts with relevance labels from `all-parts-index.json` |
+
+There are **34 subcommands total** — run `finetune.py --help` for the full list.
+
+Other helper scripts:
+
+| Script | Step | What it does |
+|--------|------|-------------|
+| `extract_router.py` | 2a | **Primary extraction entry point.** Auto-routes each PDF via `is_digital_pdf()`: digital → `odl_extract.py`, scanned → `docling_extract.py`. Writes `extraction-result.json` + sibling `extraction-status.json` recording the backend used. Supports `--batch`, `--skip-existing`, `--force odl\|docling`. |
+| `odl_extract.py` | 2a | OpenDataLoader PDF wrapper (local Java-based, no Docker). Deterministic output, tagged-PDF structure tree support. Invoked by `extract_router.py` for digital PDFs. |
+| `docling_extract.py` | 2a | Docling Serve async API submitter — now the **OCR fallback** for scanned PDFs. Still exposes `is_digital_pdf()` used by the router for classification. |
+| `pdftotext_extract.py` | 2a | Last-resort extraction via pdftotext (no Docker required), same output schema — used only when both ODL and Docling are unavailable. |
+| `build_knowledge_parts.py` | 2c | Deterministic extraction→knowledge_parts.json converter — sniffs ODL `kids[]` vs Docling `chunks[]`, heading-aware splitting, emits new metadata (`semantic_type`, `heading_level`, `parent_section`, `tag_source`). Default; no custom script needed. |
+| `extract_tables.py` | 2b | Upgrades text parts to table parts using structured Docling table data (headers, rows, metadata) — Docling fallback path only; ODL emits table parts directly via `build_knowledge_parts.py`. |
+| `camelot_extract_tables.py` | 2d | **Table fallback** — re-extracts tables using Camelot stream mode when Docling produces garbled tables (inconsistent columns, mixed content). Multi-page stitching. Run when `validate_extraction.py` warns about table quality. |
+| `consolidate_parts.py` | 2c | Merges adjacent text parts, drops short fragments, fixes Unicode, validates quality |
+| `validate_extraction.py` | 2e | Cross-document extraction quality gate (parts/page, title diversity, avg length). Also detects page break artifacts in pipe tables (non-table lines + repeated headers) — FAIL for large tables with artifacts. |
+| `generate_records.py` | 4 | Default: generates records per leaf topic via LLM (calls `chat_completion.py`). Supports `--ground-truth-format` for structured-output tasks (forces scenario-based prompts). `--append` auto-skips existing topics. NeMo Data Designer is an optional alternative — see Step 4B |
+| `convert_nemo_rows.py` | 4B | Converts NeMo DataDesigner output rows to `training.jsonl`; filters by judge scores; writes `nemo-metadata.jsonl` sidecar |
+| `chat_completion.py` | 4 | Calls LLM API — validates JSON when `response_format` is `json_object` |
+| `validate_dataset.py` | 5.5 | Validates JSONL format, fields, RFT compliance, cross-refs topics/parts |
+| `deduplicate_records.py` | 4 | Removes near-duplicate prompts across overlapping topics (threshold-based) |
+| `data_quality_gate.py` | 5.5b | Pre-eval data quality gate: structural checks, diversity analysis, completion length, **source accuracy** (GT values vs source parts), GT quality scoring, prompt-GT alignment |
+| `probe_difficulty.py` | 7c+ | Post-eval difficulty probe: difficulty buckets, K=8 zero-var prediction, grader granularity, per-topic signal |
+| `finetune.py harden-records` | 7c++ | Post-eval: generates harder variants of trivial records (score > 0.85) via LLM rewrite. Adds alongside originals. Research: arXiv:2505.17063 |
+| `dry_run_grader.py` | 5 | Tests grader on one record via gateway sandbox |
+| `run_evaluation.py` | 7b | Legacy: Creates eval job, polls until complete. Prefer `finetune.py create-eval` + `poll-eval` |
+| `start_training.py` | 7d | Legacy: Starts training job, polls until complete. Prefer `finetune.py create-training` + `poll-training` |
+| `analyze_training.py` | 8c | Fetches/analyzes training metrics — reward trend, KL health, clipping, loss stability, per-epoch evals, severity-tagged alerts. Also does per-record epoch analysis (top regressions/improvements with model output + grader reason), auto-detects epoch_collapse/over_prediction/output_collapse patterns. Fixed epoch eval fetch (uses provider_job_id). |
+| `print_metrics_table.py` | 8 | Print training metrics table (per-epoch or per-step) — human-readable format |
+| `checkpoint.py` | all | Pipeline checkpoint — save/check/reset step progress for crash recovery |
+
+All scripts use PEP 723 inline dependencies. Run with `python3` (requires `requests` package) or `uv run` (auto-installs deps).
+
+## Subagents
+
+The skill uses 4 subagents (in `agents/`) to handle context-heavy, long-running, or repetitive work in isolated contexts:
+
+| Subagent | Invoked at | What it does | Input | Output |
+|----------|-----------|-------------|-------|--------|
+| `knowledge-extractor` | Step 2b (parallel, 1 per PDF) | Extracts knowledge from ONE document: reads `extraction-result.json` (ODL or Docling), runs `build_knowledge_parts.py`, post-processes, uploads | SKILL_DIR, WORKFLOW_ID, DOC_PATH, DOC_SLUG, DOC_DIR | `knowledge_parts.json`, `parts-index.json`, gateway upload |
+| `relation-builder` | Step 3b | Matches knowledge parts to leaf topics (max 15 per topic) | `all-parts-index.json` + `topics.json` via PROJECT_DIR | `relations.json` |
+| `nemo-data-generator` | Step 4B (when `use_nemo=true`) | Generates training records via NeMo Data Designer server. Takes topics + system prompt, produces `training.jsonl` | topics, system prompt, workflow ID | `training.jsonl`, `nemo-metadata.jsonl` |
+| `training-monitor` | Step 7e (background) | Polls training metrics every 30s, detects anomalies (NaN loss, KL divergence, overfitting), saves metrics data for post-training analysis | Gateway URL, WORKFLOW_ID, JOB_ID, OUTPUT_DIR | `{JOB_ID}-metrics.json`, `{JOB_ID}-monitor-report.json` |
+
+The main agent delegates to subagents explicitly. Each subagent starts with a fresh context, reads only the files it needs, and returns a structured summary. The `knowledge-extractor` runs in parallel (1 per document) during Step 2. The `training-monitor` runs in the background during Step 7e — it writes a Python script, launches it via `nohup`, and returns immediately.
+
+## Local Files → Gateway Mapping
+
+Each local file maps to a gateway API endpoint. The `finetune.py` script handles all transformations:
+
+| Local file | Gateway endpoint | Transformation |
+|-----------|-----------------|----------------|
+| *(objective/name)* | `POST /finetune/workflows` | Direct JSON |
+| `doc.pdf` + `knowledge_parts.json` | `POST /workflows/{id}/knowledge` + `/parts` | `id` → `reference_id`, removes `source_id` |
+| `topics.json` | `POST /workflows/{id}/topics` | Wrapped in `{"topics": [...]}` |
+| `relations.json` | `POST /workflows/{id}/topics/relations` | Wrapped in `{"relations": [...]}` |
+| `training.jsonl` | `POST /workflows/{id}/records` | `messages` → `data.input.messages`, batched 200/call |
+| `grader.js` | `PATCH /workflows/{id}/evaluator` | Wrapped in evaluator config object |
+
+### Record format transformation detail
+
+The skill writes records in **OpenAI format** locally (system content is a composed prompt — see Step 4):
+```json
+{"messages": [{"role": "system", "content": "You are... For tactical positions, identify forcing moves... When identifying fork opportunities, assess knight forks..."}, {"role": "user", "content": "..."}], "id": "r-001", "topic": "forks", "source_parts": ["chess-tactics-ch3"]}
+```
+
+`finetune.py upload-records` transforms each record to **gateway format** before uploading:
+```json
+{"id": "r-001", "data": {"input": {"messages": [...]}, "output": {}}, "topic": "forks", "metadata": "{\"source_parts\": [\"chess-tactics-ch3\"]}", "is_generated": true}
+```
+
+The gateway DB stores the **wrapped format** (`data.input.messages`). The UI handles both formats via `extractMessages()`.
+
+---
+
+## Step 1: Define Objective
+
+**What happens**: The agent asks the user (or infers from the prompt) what the model should learn. It creates a workflow on the gateway with a name, objective, and system prompt.
+
+**Script call**:
+```bash
+WORKFLOW_ID=$(python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-workflow \
+  --name "My Project" --objective "Train a model to..." | tail -1)
+```
+
+**Persist the workflow ID** to a config file so it's easy to find later:
+```bash
+cat > finetune-project/config.json << EOF
+{"workflow_id": "$WORKFLOW_ID", "gateway_url": "http://localhost:9090"}
+EOF
+```
+
+**User constraints** (optional): The user can add a `constraints` field to `config.json` to cap training cost and duration. `estimate-training` and `create-training` both read these constraints automatically.
+
+```json
+{"workflow_id": "...", "gateway_url": "http://localhost:9090", "constraints": {"max_cost_usd": 2.00, "max_duration_minutes": 60}}
+```
+
+**Files produced**: `finetune-project/config.json` (workflow ID, gateway URL, optional constraints). Data goes straight to the gateway DB.
+
+**How to verify progress**:
+```bash
+# Check if workflow exists
+sqlite3 ~/.vllora/vllora.db "SELECT id, name FROM workflows ORDER BY created_at DESC LIMIT 1;"
+```
+
+**Execution log entry**:
+```
+## Step 1: Define Objective
+- [timestamp] Workflow created on gateway
+  - ID: <uuid>
+  - Name: <project name>
+  - Objective: <what the model should do>
+  - System prompt: "You are..."
+```
+
+---
+
+## Step 2: Extract Documents
+
+This is the longest and most complex step. It has 4 sub-stages.
+
+### 2a-2b. Extract documents via the router
+
+**What happens**: The agent calls `scripts/extract_router.py`, a single entry point that auto-routes each PDF by `is_digital_pdf()`:
+
+- **Digital PDFs → OpenDataLoader (ODL)** — local Java-based extractor via `scripts/odl_extract.py`. No Docker, no async polling, deterministic byte-identical reruns. Requires Java 11+ and `opendataloader-pdf` installed.
+- **Scanned PDFs → Docling Serve** — still handled via `scripts/docling_extract.py` (async submit/poll against `localhost:5001`). Docker is only needed when at least one input PDF is scanned.
+
+**Script call** (batch, recommended):
+```bash
+uv run ${CLAUDE_SKILL_DIR}/scripts/extract_router.py --batch --skip-existing \
+  pdfs/doc1.pdf:finetune-project/knowledge/doc1-slug/extraction-result.json \
+  pdfs/doc2.pdf:finetune-project/knowledge/doc2-slug/extraction-result.json
+```
+
+For a single file:
+```bash
+uv run ${CLAUDE_SKILL_DIR}/scripts/extract_router.py document.pdf \
+  -o finetune-project/knowledge/doc-slug/extraction-result.json
+```
+
+**Sibling file**: `extraction-status.json` is written next to every `extraction-result.json` recording which backend ran (`"odl" | "docling"`), whether the tagged-PDF structure tree was consumed (`used_struct_tree`), page counts, and duration. Downstream scripts sniff this to know how to parse the result.
+
+> **IMPORTANT**: Always use `extract_router.py`. Do NOT call Docling endpoints directly via curl — the sync endpoint times out on large PDFs and the router handles retry/polling. Do NOT call `odl_extract.py` directly either — the router's routing logic is the contract downstream steps depend on.
+
+**Internal details** (agents should NOT call these directly):
+- ODL path: `opendataloader_pdf.convert(input_path=[...], output_dir=..., format="json", reading_order="xycut", use_struct_tree=True, table_method="cluster")` — one JVM per batch
+- Docling fallback path: `POST /v1/chunk/hybrid/file/async` → `GET /v1/status/poll/{task_id}` → `GET /v1/result/{task_id}`
+
+**What to watch for**:
+- **All-digital corpus**: Docker is not required. The router will never touch Docling.
+- **Mixed corpus**: Docling needs `docker run -p 5001:5001 ghcr.io/docling-project/docling-serve-cpu:latest` for the scanned-PDF subset; ODL runs locally for the rest.
+- **Determinism**: ODL produces byte-identical output across runs (unlike Docling async). A good property to verify with `diff` between two runs on the same digital PDF.
+- **Large PDFs**: ODL digital extraction scales with JVM startup + page count; Docling OCR for scanned pages can take 10-20 min on 200+ pages.
+
+**Last-resort fallback — pdftotext** (when neither ODL nor Docling is available):
+
+```bash
+uv run ${CLAUDE_SKILL_DIR}/scripts/pdftotext_extract.py --batch \
+  doc1.pdf:finetune-project/knowledge/doc1/knowledge_parts.json \
+  doc2.pdf:finetune-project/knowledge/doc2/knowledge_parts.json
+```
+
+pdftotext writes `knowledge_parts.json` directly (no `extraction-result.json` step). It loses tables, images, and layout — only use when both primary backends are unavailable. Then run `consolidate_parts.py` and `validate_extraction.py` on the output — same as the router path.
+
+**Files produced** (per document):
+```
+finetune-project/knowledge/
+├── chess-tactics/                 # Slugified filename (not doc-1/)
+│   ├── extraction-result.json     # ODL kids[] tree OR Docling chunks[] + documents[]
+│   └── extraction-status.json     # backend, used_struct_tree, pages, duration
+├── strategy-guide/
+│   ├── extraction-result.json
+│   └── extraction-status.json
+└── endgame-manual/
+    ├── extraction-result.json
+    └── extraction-status.json
+```
+
+**How to verify progress**:
+```bash
+# Check which documents have been extracted and which backend ran
+ls -lh finetune-project/knowledge/*/extraction-result.json
+jq -r '"\(.pdf)\t\(.backend)\t\(.pages)"' finetune-project/knowledge/*/extraction-status.json
+```
+
+### 2c. Process each document into knowledge parts
+
+**What happens**: For each document, the agent:
+1. **Reads the extraction result** — examines the first/middle/last chunks (Docling path) or `kids[]` elements (ODL path) to understand the document structure before trusting extraction blindly
+2. **Runs `build_knowledge_parts.py`** — deterministic converter that sniffs the input shape (ODL `kids[]` vs Docling `chunks[]`) and emits a conformant `knowledge_parts.json` with the new `semantic_type`, `heading_level`, `parent_section`, and `tag_source` metadata fields:
+   ```bash
+   python3 ${CLAUDE_SKILL_DIR}/scripts/build_knowledge_parts.py \
+     finetune-project/knowledge/{doc-slug}/extraction-result.json \
+     -o finetune-project/knowledge/{doc-slug}/knowledge_parts.json \
+     --slug {doc-slug}
+   ```
+   Only write a custom `extract.py` if: (a) `build_knowledge_parts.py` produces 0 parts, or (b) CUSTOM_INSTRUCTIONS were provided for this document. Custom scripts **must read from `extraction-result.json`** — never from raw PDF text or regex-based splitting.
+3. **Runs consolidation** — `scripts/consolidate_parts.py` merges adjacent text parts under the same heading, drops short fragments (<50 chars), fixes Unicode escape sequences, reassigns sequential IDs, and regenerates `parts-index.json`
+
+**Consolidation** (run after the extraction script):
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/consolidate_parts.py knowledge/{doc-slug}/knowledge_parts.json
+```
+
+This reduces part count (e.g., 1018 raw → 45 consolidated), improves title diversity, and ensures content is long enough for meaningful training data. Use `--dry-run` to validate without modifying.
+
+**Files produced** (per document):
+```
+finetune-project/knowledge/{doc-slug}/
+├── extraction-result.json     # From step 2b — ODL kids[] or Docling chunks[]
+├── extraction-status.json     # From step 2b — backend + provenance metadata
+├── knowledge_parts.json       # Structured parts: text, table, image (consolidated)
+├── parts-index.json           # Lightweight index for topic design (regenerated)
+└── extract.py                 # (optional) Custom script — only if build_knowledge_parts.py produces 0 parts
+```
+
+Where `{doc-slug}` is the slugified filename (e.g., `chess-tactics/`, `strategy-guide/`).
+
+**`knowledge_parts.json` structure**:
+```json
+{
+  "source": {
+    "id": "chess-tactics",
+    "name": "chess-tactics.pdf",
+    "description": "Chess tactics textbook"
+  },
+  "parts": [
+    {
+      "id": "chess-tactics-chapter-3",
+      "source_id": "chess-tactics",
+      "type": "text",
+      "title": "Chapter 3: Tactical Motifs",
+      "content": "The fork is a tactic where...",
+      "extraction_path": "[\"3 Tactical Motifs\"]",
+      "extraction_metadata": { "pages": [42, 43], "source_chunks": [20] }
+    },
+    {
+      "id": "chess-tactics-table-1",
+      "type": "table",
+      "title": "Common Fork Patterns",
+      "content": "| Pattern | Frequency | ...",
+      ...
+    }
+  ]
+}
+```
+
+**`parts-index.json` structure** (lightweight — no full content):
+```json
+[
+  {
+    "id": "chess-tactics-chapter-3",
+    "type": "text",
+    "title": "Chapter 3: Tactical Motifs",
+    "extraction_path": "[\"3 Tactical Motifs\"]",
+    "pages": [42, 43],
+    "content_preview": "The fork is a tactic where a single piece...",
+    "source_doc": "chess-tactics.pdf"
+  }
+]
+```
+
+**How to verify progress**:
+```bash
+# Check which documents have been processed
+ls finetune-project/knowledge/*/knowledge_parts.json 2>/dev/null
+
+# Count parts per document
+for f in finetune-project/knowledge/*/knowledge_parts.json; do
+  echo "$f: $(python3 -c "import json; print(len(json.load(open('$f')).get('parts',[])))" 2>/dev/null) parts"
+done
+```
+
+### 2d. Merge part indexes
+
+**What happens**: The agent merges all per-document `parts-index.json` files into a single `all-parts-index.json`. This merged index is what downstream steps (topic design, data generation) use — it's small enough to read in context.
+
+**Files produced**:
+```
+finetune-project/knowledge/
+├── all-parts-index.json       # Merged index across all documents
+└── extraction-notes.md        # Summary of all documents extracted
+```
+
+### 2e. Verify ALL documents were processed
+
+**CRITICAL CHECK — do NOT proceed to Step 3 until this passes.** Two checks run:
+
+**Check 1: Document completeness** — counts source PDFs vs extracted `knowledge_parts.json`:
+```bash
+DOC_COUNT=$(ls *.pdf 2>/dev/null | wc -l | tr -d ' ')
+EXTRACTED_COUNT=$(find finetune-project/knowledge -mindepth 2 -name 'knowledge_parts.json' 2>/dev/null | wc -l | tr -d ' ')
+echo "Source documents: $DOC_COUNT | Extracted: $EXTRACTED_COUNT"
+
+if [ "$EXTRACTED_COUNT" -lt "$DOC_COUNT" ]; then
+  echo "ERROR: Only $EXTRACTED_COUNT of $DOC_COUNT documents extracted!"
+  exit 1
+fi
+```
+
+**Check 2: Extraction quality gate** — validates all documents pass quality thresholds:
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/validate_extraction.py finetune-project/knowledge/
+```
+
+This checks per-document: parts-per-page ratio (>15 = FAIL), short parts (<50 chars, >20% = FAIL), title diversity (<50% = FAIL), avg content length (<100 chars = FAIL), Unicode encoding issues, and page break artifacts in pipe tables (non-table lines + repeated headers — FAIL for large tables with artifacts). Use `--fix` to auto-run `consolidate_parts.py` on failing documents:
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/validate_extraction.py finetune-project/knowledge/ --fix
+```
+
+If any documents are missing, the agent goes back to Step 2a-2c. If quality checks fail, the agent re-runs consolidation or fixes the extraction script.
+
+### 2f. Upload knowledge sources
+
+**What happens**: Each document is uploaded as a separate knowledge source with its extracted parts.
+
+**Script call** (per document):
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-knowledge \
+  --workflow-id $WORKFLOW_ID \
+  --file "$DOC" \
+  --parts-file "$DOC_DIR/knowledge_parts.json" \
+  --name "$DOC" \
+  --force
+```
+
+The `--force` flag uses PUT upsert — it atomically replaces any existing source with the same name, making re-uploads safe.
+
+**How to verify**:
+```bash
+# Check merged index
+python3 -c "import json; d=json.load(open('finetune-project/knowledge/all-parts-index.json')); print(f'{len(d[\"parts\"])} total parts')"
+```
+
+---
+
+## Step 3: Build Topic Hierarchy
+
+**What happens**: The agent designs a topic hierarchy based on the objective and the extracted content. It reads `all-parts-index.json` to understand what material is available, then creates a tree of topics.
+
+After designing topics, it delegates to the **relation-builder subagent** — a separate agent that reads `all-parts-index.json` and `topics.json`, matches parts to topics, and writes `relations.json`.
+
+**Files produced**:
+```
+finetune-project/
+├── topics.json                # Flat array with parent_id for hierarchy
+└── relations.json             # Topic → part mappings
+```
+
+**`topics.json` structure**:
+```json
+[
+  {"id": "tactics", "name": "Tactical Patterns", "parent_id": null, "system_prompt": "For tactical positions, identify forcing moves, calculate variations, and evaluate material vs positional trade-offs."},
+  {"id": "forks", "name": "Forks", "parent_id": "tactics", "system_prompt": "When identifying fork opportunities, assess knight forks, pawn forks, and queen forks based on piece placement and king safety.", "expected_difficulty": "medium"},
+  {"id": "pins", "name": "Pins", "parent_id": "tactics", "system_prompt": "When analyzing pin and skewer tactics, distinguish absolute from relative pins and recommend appropriate exploitation strategies.", "expected_difficulty": "medium"}
+]
+```
+
+Each topic's `system_prompt` is a **segment** that gets composed with its ancestors during record generation (Step 4). Write as behavioral instructions using When/For/Given + action verbs (assess, recommend, identify, compare). Each level adds only what the parent doesn't already say. Keep each segment to 1-2 sentences.
+
+> **Topic name sanitization**: Topic names must not contain slashes (`/`). The skill auto-sanitizes slashes to hyphens (`-`) to prevent path-related issues in file names and gateway identifiers.
+
+**`relations.json` structure**:
+```json
+[
+  {"topic_identifier": "forks", "part_identifier": "chess-tactics-chapter-3"},
+  {"topic_identifier": "forks", "part_identifier": "strategy-guide-section-5"},
+  {"topic_identifier": "pins", "part_identifier": "chess-tactics-chapter-4"}
+]
+```
+
+**ID format**: Use the **string reference_id** from `topics.json` and `knowledge_parts.json` — NOT gateway UUIDs. The gateway resolves both `topic_identifier` and `part_identifier` by matching against either the UUID `id` or the string `reference_id` automatically. Do NOT manually query the database to map reference_ids to UUIDs.
+
+**Upload** (immediately after creation):
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-topics --workflow-id $WORKFLOW_ID --file topics.json
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-relations --workflow-id $WORKFLOW_ID --file relations.json
+```
+
+**How to verify progress**:
+```bash
+# Check topics
+python3 -c "import json; t=json.load(open('finetune-project/topics.json')); print(f'{len(t)} topics, {len([x for x in t if x[\"parent_id\"] is None])} roots')"
+
+# Check relations
+python3 -c "import json; r=json.load(open('finetune-project/relations.json')); print(f'{len(r)} relations')" 2>/dev/null
+```
+
+---
+
+## Step 3.5: Categorize Existing Records (optional)
+
+If the user provides existing training data (not generated by the skill), the agent assigns each record to a leaf topic before generating new data. This step is skipped when generating all data from scratch.
+
+**How it works**: The agent reads the existing records and `topics.json`, then uses the LLM to classify each record into the most appropriate leaf topic based on its content. The `topic` field is set on each record.
+
+---
+
+## Step 4: Generate Training Data
+
+**What happens**: For each leaf topic, the agent (via `generate_records.py`):
+1. Finds related parts via `relations.json`
+2. Reads the full content from the relevant `{doc-slug}/knowledge_parts.json`
+3. Composes a hierarchical system prompt by walking up the topic tree (root persona + ancestor system_prompts + leaf system_prompt)
+4. Makes **multiple LLM calls per topic** (one per prompt type: explain, scenario, compare/analyze, edge-case, application) for better diversity
+5. Writes each record to `training.jsonl` with the composed system prompt
+
+**Script call**:
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
+  --topics finetune-project/topics.json \
+  --relations finetune-project/relations.json \
+  --knowledge-dir finetune-project/knowledge \
+  --system-prompt "You are an expert chess tutor..." \
+  --output finetune-project/training.jsonl \
+  --records-per-topic 25 \
+  --parallel 4 \
+  --upload-incremental --workflow-id $WORKFLOW_ID \
+  --enrich-sources
+```
+
+Key flags: `--parallel` (inner parallelism per topic), `--upload-incremental` (records appear in UI as each topic completes), `--weight-by-difficulty` (distribute by base model eval scores — hard topics get more records), `--weight-by-source` (distribute proportionally to linked source parts), `--append` (retry failed topics without overwriting), `--min-per-topic` / `--max-per-topic` (bounds per topic).
+
+**External dependency**: Requires an LLM API key (OpenAI, etc.) configured for `chat_completion.py`.
+
+**Which files to read for source material**: The agent reads full part content from `{doc-slug}/knowledge_parts.json` files (not the merged index, which only has previews). It uses `all-parts-index.json` to locate which document a part belongs to.
+
+**⚠️ Deduplication (mandatory)** — overlapping topics produce similar questions. Always run after generation:
+```bash
+uv run ${CLAUDE_SKILL_DIR}/scripts/deduplicate_records.py finetune-project/training.jsonl --threshold 0.85
+```
+Expect 5-15% reduction. If >20% are duplicates, the topic hierarchy has too much overlap — consider merging topics.
+
+**Files produced**:
+```
+finetune-project/
+└── training.jsonl             # One JSON record per line
+```
+
+**Record format** (OpenAI/skill format — no assistant messages for RFT):
+```json
+{"messages": [{"role": "system", "content": "You are an expert chess tutor. For tactical positions, identify forcing moves, calculate variations, and evaluate material vs positional trade-offs. When identifying fork opportunities, assess knight forks, pawn forks, and queen forks based on piece placement and king safety."}, {"role": "user", "content": "Explain the knight fork"}], "id": "forks-001", "topic": "forks", "source_parts": ["chess-tactics-chapter-3"]}
+```
+
+The system message is a **composed prompt** — `generate_records.py` walks up the topic hierarchy and joins the root persona (`--system-prompt`) with ancestor and leaf `system_prompt` segments, joined with a space into a single flowing paragraph. Each leaf topic gets a different composed prompt. See `generate-records-deep-dive.md` for the composition logic.
+
+**Upload** (immediately after generation):
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records --workflow-id $WORKFLOW_ID --file training.jsonl
+```
+
+The script transforms records from skill format to gateway format automatically (see [Local Files → Gateway Mapping](#local-files--gateway-mapping)).
+
+**How to verify progress**:
+```bash
+# Count records generated so far
+wc -l finetune-project/training.jsonl 2>/dev/null
+
+# Check topic distribution
+python3 -c "
+import json, collections
+topics = collections.Counter()
+for line in open('finetune-project/training.jsonl'):
+    r = json.loads(line)
+    topics[r.get('topic','unknown')] += 1
+for t, c in topics.most_common():
+    print(f'  {t}: {c}')
+print(f'Total: {sum(topics.values())}')
+" 2>/dev/null
+```
+
+## Step 4B: Generate Training Data via NeMo Data Designer (Optional Path)
+
+**What happens**: NeMo Data Designer (repo: https://github.com/vllora/nemo) is an **optional** alternative when the server is running at `localhost:8000`. Instead of `generate_records.py`, you submit a recipe to the NeMo server. The `rag-retrieval` column plugin calls the gateway knowledge search per row at generation time — no need to pre-link relations. Main advantages over Step 4: judge columns for quality filtering and `reference_answer` generation.
+
+**Two-stage question generation** — inspired by multi-stage retrieval pipelines (arXiv:2509.25736 describes a similar retrieve-generate-refine approach). Note: the cited paper retrieves first then generates; this template generates a blind question first for diversity, then retrieves — a recipe design choice, not a paper replication. Both templates implement this pattern:
+```
+topic_path → rag-retrieval → retrieved_chunks
+                  ↓
+            raw_question    (drop:true — generated WITHOUT retrieved text to avoid anchoring bias)
+                  ↓
+raw_question → rag-retrieval → question_chunks   (drop:true — question-specific retrieval)
+                  ↓
+            user_message    (refines raw_question using question_chunks)
+```
+Key insight: generating the question blind first produces more diverse questions; the retrieval step grounds the final version in specific source material.
+
+**Script calls**:
+```bash
+# 1. Materialize seed parquet (one row per leaf topic)
+uv run nemo/materialize_seed.py \
+  --topics finetune-project/topics.json \
+  --output finetune-project/curated-seed.parquet
+
+# 2. Upload seed + inspect
+BLOCK_ID=$(date +%s)
+curl -sS -X POST "http://localhost:8000/api/data-recipe/seed/upload-curated" \
+  -F "file=@finetune-project/curated-seed.parquet" -F "block_id=$BLOCK_ID" \
+  > finetune-project/nemo-seed-upload.json
+FILE_ID=$(jq -r '.file_id' finetune-project/nemo-seed-upload.json)
+
+# 3. Preview recipe (execution_type: "preview", rows: 10) then full job
+JOB_ID=$(jq -r '.job_id' finetune-project/nemo-job.json)
+curl -sS "http://localhost:8000/api/data-recipe/jobs/$JOB_ID/dataset?limit=200&offset=0" \
+  > finetune-project/nemo-dataset-page-1.json
+
+# 4. Convert → validate → upload
+python3 ${CLAUDE_SKILL_DIR}/scripts/convert_nemo_rows.py \
+  --input finetune-project/nemo-dataset-page-1.json \
+  --output finetune-project/training.jsonl \
+  --min-answerable 1.0 --min-groundedness 0.5 \
+  --ground-truth-field reference_answer
+
+python3 ${CLAUDE_SKILL_DIR}/scripts/validate_dataset.py \
+  finetune-project/training.jsonl --nemo
+
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records \
+  --workflow-id $WORKFLOW_ID --file finetune-project/training.jsonl
+```
+
+**Files produced**:
+```
+finetune-project/
+├── curated-seed.parquet        # One row per leaf topic
+├── nemo-seed-upload.json       # Seed upload response (file_id, block_id)
+├── nemo-recipe.json            # Recipe definition
+├── nemo-preview.json           # Preview job metadata
+├── nemo-job.json               # Full job metadata
+├── nemo-dataset-page-1.json    # Raw NeMo output rows
+├── training.jsonl              # Converted + filtered training records
+└── nemo-metadata.jsonl         # Judge scores sidecar
+```
+
+**How to verify progress**:
+```bash
+# Check NeMo server is running
+curl -sS http://localhost:8000/health && echo "NeMo available"
+
+# Count converted records
+wc -l finetune-project/training.jsonl 2>/dev/null
+```
+
+See `reference/nemo-guide.md` for full recipe design, column types, template selection, and troubleshooting.
+
+---
+
+### Step 4.5: Variant Generation (optional)
+
+If some topics are under-represented, the agent generates variants from existing records — varying scenario, difficulty, tone while keeping the system prompt unchanged.
+
+**How it works**:
+1. Identify under-represented topics (< 50% of average record count)
+2. Select seed records from those topics
+3. Call `chat_completion.py` asking the LLM to create 3-5 variants per seed — same scenario, different specifics/difficulty/tone
+4. Each variant gets `source_record_id` pointing to the original seed record for lineage tracking
+5. Append variants to `training.jsonl`
+
+---
+
+## Step 5: Write Grader
+
+**What happens**: The agent reads sample records from `training.jsonl`, analyzes what good vs. bad responses look like, then writes a JavaScript grader function. The grader scores model responses 0-1 using either programmatic checks, LLM-as-judge, or a hybrid.
+
+**Grader templates** — pick the closest and customize:
+| Template | Best for |
+|----------|----------|
+| `templates/grader-template.js` | General-purpose (accuracy, helpfulness, clarity, completeness, tone) |
+| `templates/grader-extraction.js` | Structured data extraction (field accuracy, hallucination rate, format compliance) |
+| `templates/grader-compliance.js` | Rule application (rule recall, false positives, citation accuracy) |
+| `templates/grader-readability.js` | Simplification (readability + Flesch-Kincaid, jargon elimination, accuracy preservation) |
+
+It then dry-runs the grader against a sample row via the gateway's QuickJS sandbox to verify it works:
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
+  --workflow-id $WORKFLOW_ID \
+  --script grader.js \
+  --row '{"messages": [...]}'
+```
+
+The dry-run sends the grader + one record to the gateway sandbox and returns `{score, reason}` instantly. If the script has syntax errors, the `reason` field contains the JS error. The sandbox does NOT support `console.log`.
+
+**Upload** (immediately after writing):
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-grader --workflow-id $WORKFLOW_ID --file grader.js
+```
+
+**Files produced**:
+```
+finetune-project/
+└── grader.js                  # JavaScript grader function
+```
+
+### Step 5.5: Validate Dataset
+
+The agent runs `validate_dataset.py` against `training.jsonl` to check:
+- Valid JSON on every line
+- Required fields present (`messages`, `id`)
+- No assistant messages (RFT format)
+- No duplicate IDs
+- No trivially short user messages (< 10 chars)
+- Minimum record count (≥ 50, recommend 100-200+)
+- Cross-references topic IDs against `topics.json` (with `--topics` flag)
+- Cross-references source_parts against `all-parts-index.json` (with `--parts` flag)
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/validate_dataset.py finetune-project/training.jsonl \
+  --topics finetune-project/topics.json \
+  --parts finetune-project/knowledge/all-parts-index.json
+```
+
+### Step 5.5b: Data Quality Gate (pre-eval)
+
+**What happens**: The agent runs a pre-eval quality gate that catches data issues before they waste expensive evaluation (~45 min) or training (hours) runs. This gate validates data quality dimensions that `validate_dataset.py` doesn't check: ground truth specificity, prompt-answer alignment, semantic diversity, and near-duplicate detection.
+
+**Why this exists**: Research shows data quality is the highest-leverage intervention for GRPO training. DOTS+RR (arXiv:2506.05316) demonstrated 23-62% training time reduction from better data selection. OpenAI's RFT Guide states: "Before adding more compute, invest in data quality."
+
+**Quick gate (free — always run)**:
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/data_quality_gate.py finetune-project/training.jsonl \
+  --topics finetune-project/topics.json
+```
+
+Runs Gate 1 (structural: duplicate IDs, prompt lengths, GT presence, topic balance) and Gate 2 (diversity: near-duplicate detection, pairwise distance, per-topic diversity). No API calls — instant results.
+
+**Full gate (with LLM scoring — run on first pipeline pass)**:
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/data_quality_gate.py finetune-project/training.jsonl \
+  --topics finetune-project/topics.json \
+  --all-gates --sample 30 \
+  --save finetune-project/data-quality-report.json
+```
+
+Adds Gate 3 (GT quality: LLM scores each ground truth for specificity/completeness) and Gate 4 (alignment: LLM checks if GT fully answers the prompt). Samples 30 records to keep cost low.
+
+**Exit codes**: 0 = PASS (proceed), 1 = FAIL (must fix), 2 = WARN (review priorities).
+
+**The 5 gates**:
+
+| Gate | Cost | What it catches | Research basis |
+|------|------|-----------------|----------------|
+| Structural | Free | Duplicate IDs, empty prompts, topic imbalance, topic balance hard fail (<50% median) | OpenAI RFT Guide |
+| Diversity | Free | Near-duplicate prompts, low diversity, per-topic redundancy, **GT distribution** (gt_dominance, label_skew, low_gt_uniqueness) | arXiv:2511.01490, arXiv:2506.19262, MO-GRPO arXiv:2509.22047 |
+| Completion Length | Free | Estimates if `max_output_tokens` is sufficient (GT length × task-complexity multiplier) | DAPO (arXiv:2503.14476), "Tricks or Traps" (arXiv:2508.08221) |
+| GT Quality | $ | Vague ground truths, non-specific policy statements | DeepSeek-R1 (arXiv:2501.12948) |
+| Alignment | $ | Prompt-GT misalignment, multi-part questions with partial answers | OpenAI RFT |
+
+**Common fixes**:
+- Vague GTs → rewrite with specific citations/rules/numbers
+- Near-duplicates → run `deduplicate_records.py` or regenerate
+- Thin topics → regenerate with `generate_records.py --append`
+- Low per-topic diversity → regenerate with varied prompt types
+- Label skew → generate more records for underrepresented labels (check `fix` field in output)
+- GT dominance → add records with different GT values to rebalance
+
+**Relationship to readiness gate (Step 7c)**: The data quality gate checks data quality BEFORE eval. The readiness gate checks grader+data interaction AFTER eval. Both are needed — they catch different failure modes.
+
+> See `finetune-skill/reference/data-quality-gate.md` for threshold details and full research citations.
+
+---
+
+## Step 6: Verify & Hand Off
+
+**What happens**: Since each step already uploaded data to the gateway, Step 6 just verifies everything landed correctly. The agent runs the verify command and confirms all counts are > 0.
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py verify --workflow-id $WORKFLOW_ID
+```
+
+Output:
+```
+Workflow: <uuid>
+  Records: 214 [OK]
+  Topics: 18 [OK]
+  Sources: 3 [OK]
+  Parts: 33 [OK]
+  Relations: 42 [OK]
+  Evaluator: YES
+
+All checks passed. Ready for evaluation.
+```
+
+The UI at `http://localhost:5173/finetune` shows progress throughout the run — not just at the end.
+
+### When each piece becomes visible in the UI
+
+| After step | What appears in UI |
+|------------|-------------------|
+| Step 1 | Workflow card on the finetune list page |
+| Step 2 | Knowledge sources + parts in the Sources view |
+| Step 3 | Topic hierarchy on the Canvas view, coverage bars |
+| Step 4 | Records in the Table view, record counts on topic nodes |
+| Step 5 | Grader indicator, evaluation becomes possible |
+| Step 5.5b | Data quality validated (local report — not shown in UI) |
+
+---
+
+## Step 7: Evaluate & Validate Before Training (Eval-First Flow)
+
+**What happens**: The agent runs an **eval-first loop**: evaluate with the base model, check the readiness gate, fix issues, re-eval — and only start training after the readiness gate passes. This prevents wasting hours of GPU time on bad data or a broken grader.
+
+**Key insight**: Eval is fast (~45 min) and cheap. Training is slow (hours) and expensive.
+
+```
+Eval 4B → Readiness Gate → [FAIL] → Fix data/grader → Re-eval → ... → [PASS]
+                                                                         ↓
+                                                                   Headroom Gate
+                                                                    avg > 0.75?
+                                                                   ├── YES → Eval 0.8B → choose best headroom
+                                                                   └── NO  → good headroom
+                                                                         ↓
+                                                                       Train
+```
+
+**Time**: ~45 min per eval iteration + hours for training.
+
+### 7a. Pre-training validation (RFT-specific)
+
+Before creating any eval job, the agent validates:
+1. **Grader score distribution** — dry-run the grader on 3-5 sample records with varying quality responses. Check that scores spread across 0-1, not cluster at extremes.
+2. **max_output_tokens** — default is 512. Only increase if >50% clipping in training metrics.
+3. **Validation set** — split training.jsonl into train (80%) and validation (20%) for reward hacking detection.
+
+### 7b. Create eval job (eval-only — NO training yet)
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval \
+  --workflow-id $WORKFLOW_ID --output-dir evaluations
+```
+
+Poll eval in foreground:
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-eval \
+  --file evaluations/eval-001.json
+```
+
+### 7c. Pre-Training Readiness Gate
+
+After eval completes, check if data and grader are ready for training:
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check \
+  --file evaluations/eval-001.json
+```
+
+The readiness gate runs **4 hard checks** (sample_count, score_std, avg_score, zero_score_frac < 10%) and **soft checks** (quality signals). The summary is printed FIRST (before verbose per-record/per-topic details) to prevent truncation in long outputs.
+
+> **max_output_tokens auto-adjust**: `readiness-check` auto-adjusts `max_output_tokens` based on ground truth token P95 + 30% headroom. It adjusts upward (to prevent truncation) and downward (to reduce padding waste and kl=nan risk).
+
+> **Topic lookup**: Eval results don't include the topic field. Topic names are resolved from `training.jsonl` by matching record IDs.
+
+**Hard checks** (must ALL pass — these ask "is the grader working?", not "is the model good?"):
+| Check | Pass criteria | Research basis |
+|-------|--------------|----------------|
+| Sample count | >= 50 records | OpenAI RFT: "several dozen to a few hundred" |
+| Score std | > 0.10 (grader differentiates) | Zero-variance → zero gradient is fundamental to GRPO (DAPO §2.2). Threshold is a heuristic. |
+| Average score | > 0.05 (some signal present) | OpenAI: "0% success rate means RFT cannot bootstrap" |
+
+**Soft checks** (warnings — training can proceed):
+| Check | Pass criteria | Research basis |
+|-------|--------------|----------------|
+| Score concentration | < 50% at single value | DAPO (arXiv:2503.14476): filters uniform groups. Threshold is a heuristic. |
+| High score fraction | < 50% scores > 0.9 | Heuristic. Lenient grader → weak within-group variance. |
+| Binary fraction | < 60% exact 0/1 | DeepSeek-R1 and DAPO use 100% binary rewards successfully. Binary works but is less sample-efficient. |
+| Dead-weight | < 50% records score < 0.1 | "No Prompt Left Behind" (arXiv:2509.21880): 30-99% zero-var is normal |
+| Pass rate | > 20% records score > 0.7 | Hard prompts are most valuable (arXiv:2508.14094) |
+| Prompt learnability | > 30% prompts have varied scores | DAPO §2.2: dynamic sampling filters zero-variance groups |
+| Score-length correlation | < 0.3 | Dr. GRPO (arXiv:2503.20783) identifies length bias. Threshold is a heuristic. |
+| Topic balance | No single topic > 40% | Heuristic — balanced data is standard ML practice |
+| Per-topic dead zone | No topic with avg < 0.05 | Capability gate: avg < 0.05 means the model has no latent capability for that topic |
+| Signal density | trivial < 40% OR learnable > 35% | Warns when too many records are trivially easy (score > 0.85), reducing GRPO gradient signal |
+
+**Priority action chain** (when readiness gate fails or warns on signal density):
+1. Check `scale_rewards` is `"none"` (not `"group"` — Dr. GRPO recommendation)
+2. Check grader for leniency (scores too high = weak gradient)
+3. Run `harden-records` to generate harder variants of trivial records
+4. Eval a smaller base model for better headroom
+5. Use `filter-records --min-score` to remove trivially easy records
+
+**Decision:**
+- **Exit code 0 (PASS)** → All checks passed → proceed to Step 7d (Start Training)
+- **Exit code 1 (FAIL)** → Hard check(s) failed → fix issues → return to Step 7b (Re-eval)
+- **Exit code 2 (WARN)** → Only soft checks failed, or 1 hard check failed marginally (within 80% of threshold). **Not all WARNs are safe to train through**: if `score_concentration` > 70%, fix the grader first (most K=8 groups will score identically → zero gradient → wasted GPU hours). Other soft warnings (pass_rate, binary_frac, dead_weight) are safe to proceed.
+
+**Max 5 eval-only iterations.** If readiness gate never passes, escalate to user.
+
+### 7c+. Difficulty Probe (after readiness gate, before training)
+
+**What happens**: After the readiness gate passes (aggregate checks), the agent runs a difficulty probe that analyzes per-prompt signal strength. This catches a critical failure mode: data that looks good in aggregate but produces zero gradient at the prompt level during K=8 GRPO training.
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py difficulty-probe \
+  --file evaluations/eval-001.json --save finetune-project/difficulty-report.json
+```
+
+**What it analyzes**:
+- **Difficulty distribution**: classifies each prompt into dead/hard/learnable/easy/trivial based on K=1 score
+- **Zero-variance prediction**: estimates P(all K=8 completions score identically) per prompt
+- **Grader granularity**: score concentration, unique values, binary fraction
+- **Per-topic learnability**: which topics have the least signal
+- **Prioritized recommendations**: what to fix and expected impact
+
+**Exit codes**: 0 = PASS (proceed to training), 1 = FAIL (< 15% learnable — training will be flat), 2 = WARN (15-30% — review before training).
+
+**Research basis**: DOTS+RR (arXiv:2506.05316) proves gradient ∝ p(1-p), maximized at p=0.5. "Hard Examples Are All You Need" (arXiv:2508.14094) shows easy prompts maintain signal for only 2-9% of training. "No Prompt Left Behind" (arXiv:2509.21880) found 30-99% of prompts are zero-variance in standard GRPO. RGR-GRPO (arXiv:2511.12344) shows rubric grading dramatically improves signal density.
+
+### 7c++. Harden Records (signal density fix — optional)
+
+**What happens**: When the readiness gate or difficulty probe detects too many trivial records (score > 0.85), the agent runs `harden-records` to generate harder variants. This is part of the signal density fix flow: eval → detect trivials → harden → re-upload → re-eval.
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py harden-records \
+  --training-file finetune-project/training.jsonl \
+  --eval-file evaluations/eval-001.json \
+  --threshold 0.85 \
+  --output finetune-project/training.jsonl
+```
+
+**How it works**:
+- Identifies records with eval score > 0.85 (trivially easy for the base model)
+- For each trivial record, the LLM reads the original record + score + grader reason and rewrites the user input to be harder
+- **Adds** harder variants alongside originals (does not replace) — preserving the original data distribution
+- Domain-agnostic: no task-specific templates needed
+
+**Research basis**: arXiv:2505.17063 demonstrates +29.2% improvement from a generate-eval-rewrite loop. Hard examples yield 47% gains vs 3-15% for easy ones (arXiv:2508.14094).
+
+After hardening, re-upload records and re-eval to verify improved signal density.
+
+### 7c+++. Source-Part Coverage Audit (mandatory before training)
+
+**What happens**: Before starting training, the agent runs a mandatory coverage audit that checks all knowledge parts are tested by records with diverse difficulty levels. This ensures no source material is under-represented in the training data — preventing blind spots where the model never practices on certain extracted content.
+
+The audit verifies:
+- Every relevant knowledge part is referenced by at least one record
+- Records cover a mix of difficulty levels (not all easy or all hard)
+- No single topic monopolizes a knowledge source
+
+### 7b+. Estimate Training Cost (optional, before training)
+
+After model selection (7d headroom gate), compare candidate models by cost and duration:
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py estimate-training \
+  --workflow-id $WORKFLOW_ID \
+  --models "Qwen3.5-4B,Qwen3.5-0.8B"
+```
+
+Calls `POST /finetune/workflows/{id}/jobs/estimate` for all listed models in one request. If `config.json` contains `constraints` (`max_cost_usd`, `max_duration_minutes`), models exceeding limits are flagged. Results are auto-journaled with `constraints` and `viable_models`. The agent uses this to narrow model selection before creating a training job.
+
+### 7d. Start Training (only after readiness gate passes)
+
+**Do NOT pass `--no-early-stop` to `create-training`.** `create-training` only creates the cloud job; early stopping is controlled by `poll-training`.
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
+  --workflow-id $WORKFLOW_ID \
+  --base-model "Qwen3.5-4B" \
+  --output-model "project-v1" \
+  --output-dir training-jobs
+```
+
+**Pre-flight constraint check**: Before sending the training job to the cloud, `create-training` reads `constraints` from `config.json` and warns if the estimated cost or duration exceeds user limits. This is non-blocking (warning only, does not prevent training).
+
+**Headroom gate**: Step 7 includes a mandatory headroom check. Headroom = 1.0 - base_model_avg_score. If the base model avg score > 0.75 (headroom < 0.25), GRPO has insufficient gradient signal — all K=8 completions tend to score similarly, producing zero variance and zero gradient. The agent must eval a smaller model (e.g., 0.8B) instead.
+
+**Eval-driven model selection**: The default flow evaluates 4B first. If avg score > 0.75, the agent evals 0.8B. Training proceeds on whichever model has the best headroom (target: 0.25-0.75 avg score range). This ensures GRPO has enough room between "bad" and "good" responses to generate meaningful gradient signal.
+
+**Base model selection** — only 3 models available (9B removed — doesn't exist in backend). Optimal zone: avg score 0.30-0.70 (arXiv:2504.03380). Lower bound capability gate: avg < 0.05 = model has no latent capability.
+
+| Model | Best for | Max records (K=8) | OOM risk |
+|-------|----------|-------------------|----------|
+| `Qwen3.5-0.8B` | Quick iteration, prototyping, very narrow tasks | ~1000 | Very low |
+| `Qwen3.5-2B` | Simple tasks, fast experiments | ~800 | Low |
+| `Qwen3.5-4B` | **Default choice.** Good balance of quality and speed | ~500 | Low |
+
+**GRPO training defaults** (research-validated):
+| Parameter | Default | Rationale |
+|-----------|---------|-----------|
+| `learning_rate` | **1e-6** | DeepSeekMath (arXiv:2402.03300) uses 1e-6, DAPO (arXiv:2503.14476) confirms conservative LR for small models. Do NOT use SFT rates (2e-5 to 5e-5). |
+| `beta` | **0.01** | Light KL penalty (arXiv:2509.07430) stabilizes training. Changed from 0.0 (pure DAPO-style). |
+| `epochs` | **8/5/3/2** | Reduced maximums by dataset size: <50 records → 8, 50-200 → 5, 200-500 → 3, >500 → 2. |
+| `scale_rewards` | **"none"** | Dr. GRPO + Unsloth recommendation. Not `"group"`. Gateway expects a string, not a boolean. |
+| `loss_type` | **dr_grpo** | Default — no length bias (Dr. GRPO, arXiv:2503.20783). |
+| `mask_truncated_completions` | **false** | Unsloth recommendation. |
+| `importance_sampling_level` | **sequence** | GSPO stability — sequence-level importance sampling. |
+| `response_candidates_count` | **8** (default) | K=8 is the production default (changed from K=16). EBPO (arXiv:2602.05165) shows K=16 can be worse due to diminishing returns. Published work uses G=8 (Dr. GRPO, TRL) to G=64 (DeepSeekMath). |
+| `warmup_steps` | **20-50** | DAPO uses 20, "Tricks or Traps" uses 50. Linear warmup then constant LR. |
+
+**Epoch guidelines** (RFT ≠ SFT — fresh responses each epoch, no repetition risk. Published work: "Tricks or Traps" uses 50 epochs; OpenAI says "hundreds or thousands"). `finetune.py` auto-adjusts epochs based on dataset size when using defaults (no `--config`):
+| Records | Recommended epochs |
+|---------|-------------------|
+| < 50 | 15 |
+| 50-200 | 8 |
+| 200-500 | 5 |
+| > 500 | 3 |
+
+### 7e. Monitor training
+
+Spawn the `training-monitor` subagent. Early stopping is a polling-side auto-cancel behavior: by default, `poll-training` may cancel a running job for completion clipping, EMA score plateau/degradation, or length exploitation while saving status and metrics for post-training analysis.
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-training \
+  --file training-jobs/train-001.json \
+  --poll-interval 60 --max-wait 7200
+```
+
+If you intentionally want the cloud job to continue even when rewards plateau, pass `--no-early-stop` to `poll-training`:
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-training \
+  --file training-jobs/train-001.json \
+  --max-wait 7200 \
+  --no-early-stop
+```
+
+Do not restart `create-training` just to change this behavior; restart the local `poll-training` command with the same `train-NNN.json` file.
+
+**Files produced**:
+```
+finetune-project/evaluations/
+└── eval-001.json              # Eval results (per-record scores)
+finetune-project/training-jobs/
+├── train-001.json             # Training job metadata + status
+├── {JOB_ID}-metrics.json      # Raw metrics from monitor
+└── {JOB_ID}-monitor-report.json  # Anomaly report from monitor
+```
+
+**This step can also be done via the vLLora UI** — click "Run Evaluation" or "Start Training" on the workflow page.
+
+---
+
+## Step 8: Analyze Results
+
+**What happens**: The agent analyzes results at two points: after eval (Step 8a) and after training (Step 8b). Before analyzing, it syncs jobs from the gateway to pick up any status changes from the UI.
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py sync-jobs \
+  --workflow-id $WORKFLOW_ID --output-dir finetune-project
+```
+
+> **Read `reference/analysis-strategy.md`** before analyzing. It has decision trees, action templates, derived metrics to compute, and interactive presentation guidelines.
+> **Read `reference/training-metrics-guide.md`** for GRPO metric interpretation.
+
+### 8a. Analyze eval results (before training)
+
+This runs during the eval-first loop (Step 7b→7c). Compute:
+
+1. **Overall**: average score, pass rate (>0.7 threshold), score range
+2. **Per-topic breakdown**: group scores by topic, sort by average (weakest first)
+3. **Low-scoring records**: list records <0.7 with their `reason` fields
+4. **Score distribution**: are scores spread out (good) or clustered (grader issue)?
+5. **Readiness gate output**: which criteria passed/failed
+
+**8a-agent: Agent reads eval responses + reasons.** The agent manually reads a sample of model responses and grader reasons to build intuition about failure modes before deciding on fixes.
+
+Then run the readiness gate (Step 7c) to decide: fix + re-eval, or proceed to training.
+
+**Filter dead-weight records**: Find records where max score < 0.1 (dead weight for GRPO), diagnose why, remove them, regenerate replacements if needed.
+
+### 8b. Analyze training results (after training completes)
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/analyze_training.py \
+  --metrics-file training-jobs/$JOB_ID-metrics.json \
+  --epoch-evals-file training-jobs/$JOB_ID-epoch-evals.json
+```
+
+The script computes reward trend, KL health, clipping ratio, loss stability, grad norm spikes, signal strength, and per-topic trajectories.
+
+**Present findings interactively:**
+```
+=== Evaluation Results ===
+Average score: 0.72 | Pass rate: 78% | Records: 209
+
+Per-topic breakdown:
+  strategic-endgame:     0.45 (lowest)
+  tactical-forks:        0.91 (strong)
+
+=== Training Results ===
+Reward: 0.2 → 0.7 | KL: stable | No anomalies
+
+=== Suggested Actions ===
+1. [RECOMMENDED] Regenerate records for "strategic-endgame"
+2. [OPTIONAL] Tighten grader on "concrete_examples"
+
+What would you like to do?
+```
+
+**Mandatory checkpoint**: Before deciding next steps after training, the agent MUST run Step 8c analysis first. Decision uses first-match rules: grader exploit detected → fix grader (not "accept base model"); epoch collapse → check data quality; etc.
+
+### 8c. Analyze training results in depth
+
+**8c-agent: Agent reads epoch records across training.** The agent reads per-record epoch data (via `analyze_training.py` or `print-row-outputs`) to understand how specific records changed across epochs — top regressions, top improvements, model output text, and grader reasons.
+
+**8c-research: 5-step reasoning framework for unexpected training behavior.** When training metrics show unexpected patterns (reward collapse, epoch collapse, output collapse), the agent applies a structured reasoning framework: (1) identify the pattern, (2) check known causes, (3) verify with per-record data, (4) propose fix, (5) validate fix hypothesis against data.
+
+### 8d. Update iteration tracker
+
+After every eval/training cycle, append a summary to `iterations.md`.
+
+### 8e. Quick diagnosis patterns
+
+| Signal | Likely cause | Suggested action |
+|--------|-------------|-----------------|
+| All scores ~0 | Grader broken or too strict | Fix grader, dry-run, re-eval |
+| All scores ~1 | Grader too lenient | Add harder criteria, re-eval |
+| **>50% scores at one value** | **Grader-prompt mismatch OR grader too coarse** | Run `diagnose-grader` to identify root cause. Most common: grader expects behavior the prompts can't produce (e.g., page citations without documents). Fix: adjust grader to match prompt format. |
+| One topic consistently low | Weak prompts or poor source material | Regenerate records, add source material |
+| Good responses scoring low | Grader criteria misaligned | Adjust criteria weights or LLM judge prompt |
+| NaN/Inf loss in training | Numerical failure (check completion clipping first) | Check truncation, then lower LR |
+| KL very high but reward improving | **Normal with beta=0** (modern GRPO default per DAPO/TRL — KL is unpenalized and not even tracked in most frameworks) | No action needed |
+| train_reward up, valid_reward flat | **Reward hacking** | Improve grader, increase KL penalty, inspect outputs |
+| Reward plateau | Grader not differentiating well | Improve grader for smoother score spread |
+| Reward collapse | Grader binary or reward hacking | Rewrite grader with partial credit |
+| No learning across epochs | Task too hard for base model | Try larger base model |
+| Overfitting (peak then decline) | Too many epochs | Reduce `epochs` to peak epoch |
+
+---
+
+## Step 9: Iterate (If Needed)
+
+**What happens**: Three iteration loops with different speeds and costs.
+
+> **For full iteration diagnosis and escalation strategy**, read `reference/iteration-strategy.md`.
+
+### 9a. Eval-only iteration (readiness gate failed — fast, cheap)
+
+**Step 1: Diagnose.** Always run `diagnose-grader` first to understand the root cause:
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py diagnose-grader \
+  --file evaluations/eval-001.json --workflow-id $WORKFLOW_ID
+```
+This shows score distribution, reason patterns per bucket, auto-diagnosis (DATA vs GRADER root cause), the grader source code, whether records include source document text, response pattern analysis (dominant model response patterns, over-prediction detected from reason fields), and a **per-topic breakdown** classifying each topic as `OK`, `HARD_BUT_LEARNING`, `DEAD_WEIGHT`, `AMBIGUOUS`, or `WEAK`.
+
+**Step 2: Fix based on diagnosis.** The most common root cause is a grader-prompt mismatch:
+
+| diagnose-grader says | Root cause | Fix |
+|---|---|---|
+| "Model refuses to answer" + grader gives partial credit | **GRADER-PROMPT MISMATCH** — grader expects behavior the prompts can't produce | Adjust grader to match prompt format (remove unreachable criteria) |
+| "Grader gives same score to different failures" | **GRADER too coarse** — scoring doesn't differentiate quality levels | Add early-exit for refusals, remove score snapping, reweight criteria |
+| "Score snapping" (Math.round) | **GRADER** — continuous range collapsed to 11 values | Remove the rounding line |
+
+**Fixing the grader** (most common fix — no data re-upload needed):
+```bash
+# Edit grader.js based on diagnose-grader output, then:
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-grader \
+  --workflow-id $WORKFLOW_ID --file grader.js
+```
+
+Return to Step 7b — create a new eval and re-run the readiness gate. ~45 min per iteration.
+
+### 9b. Post-training iteration (training completed but unsatisfactory)
+
+1. **Only hyperparams need adjusting** — skip eval, go directly to Step 7d with new training config
+2. **Data or grader needs fixing** — apply fixes, return to Step 7b (re-eval first, then training)
+3. **Model too weak** — try a larger base model (0.8B → 2B → 4B). If training keeps failing (OOM/NaN), try smaller: `4B` → `2B` → `0.8B`.
+
+### 9c. Topic-level iteration (stalled topics after 2+ evals)
+
+When `diagnose-grader` per-topic output shows persistent `DEAD_WEIGHT` or `AMBIGUOUS` topics across 2+ consecutive evals, the topic itself is the problem — not the grader or records. Fix by splitting broad topics, removing impossible ones, or regenerating records with better grounding. Topics classified `HARD_BUT_LEARNING` (low avg but score variance >= 0.05) are the strongest GRPO training signal — never remove them. See SKILL.md Step 9c for the full decision table and commands.
+
+### 9d. Iteration limits and escalation
+
+- **Max 5 eval-only iterations** before training. If readiness gate never passes, escalate to user.
+- **Max 3 training iterations.**
+- **Base model escalation:** After 2 failed iterations: try smaller model for better headroom (`4B` → `2B` → `0.8B`). Only 3 models available: Qwen3.5-0.8B, 2B, 4B.
+- **When to stop:** User says satisfied, OR avg score > 0.8 AND training reward > 0.7, OR 3+ iterations with no improvement.
+- **Auto-iterate in non-interactive mode:** When running via `claude -p`, the orchestrator auto-applies the top-priority fix and re-evals without asking.
+
+---
+
+## Common Bottlenecks
+
+| Symptom | Likely cause | How to check |
+|---------|-------------|--------------|
+| Stuck after Step 1 (scanned PDFs in corpus) | Docling not running or Docker pull in progress | `curl http://127.0.0.1:5001/health` and `docker ps` — only required when `extraction-status.json` shows `backend: "docling"` |
+| Stuck after Step 1 (digital PDFs) | Java 11+ missing or `opendataloader-pdf` not installed | `java -version` and `uv tool list \| grep opendataloader` |
+| Only 1 of N `extraction-result.json` files | Docling task still polling or failed, or ODL convert crashed | `cat extraction-status.json` to see which backend ran and whether it succeeded |
+| `extraction-result.json` exists but no `knowledge_parts.json` | Agent struggling to process large JSON (>30MB), or `build_knowledge_parts.py` couldn't sniff the input shape | Check execution log for Python tracebacks and confirm the file starts with either `"kids"` (ODL) or `"chunks"` (Docling) |
+| Topics created but no `relations.json` | Relation-builder subagent hasn't run or failed | Check `execution-log.md` for "relation-builder" entries |
+| Few records in `training.jsonl` | LLM API rate limiting or key missing | Check if `OPENAI_API_KEY` is set; check agent output for errors |
+| `finetune.py` upload fails | Gateway not running or wrong endpoint | `curl http://localhost:9090/health` |
+| Extraction script errors | Bad Docling result or document-specific edge case | Check `execution-log.md` for Python errors in Step 2c |
+| Grader dry-run fails | JS syntax error in grader | Check the `reason` field in dry-run response |
+| Records uploaded but UI shows blank | Record format mismatch | Check `data` column in DB — should be `{"input":{"messages":...}}` |
+
+## File System Timeline
+
+During a successful run, files appear in this order:
+
+```
+t=0    finetune-project/execution-log.md           ← Step 1 starts
+t=1m   (workflow created in gateway DB)             ← Step 1 done, UI shows workflow card
+
+t=2m   knowledge/chess-tactics/docling-result.json    ← Step 2b (first doc done)
+t=3m   knowledge/strategy-guide/docling-result.json  ← Step 2b (second doc done)
+t=4m   knowledge/endgame-manual/docling-result.json  ← Step 2b (third doc done)
+t=6m   knowledge/chess-tactics/knowledge_parts.json  ← Step 2c (first doc extracted + consolidated)
+t=6m   knowledge/chess-tactics/parts-index.json
+t=8m   knowledge/strategy-guide/knowledge_parts.json ← Step 2c (second doc extracted + consolidated)
+t=10m  knowledge/endgame-manual/knowledge_parts.json ← Step 2c (third doc extracted + consolidated)
+t=10m  knowledge/all-parts-index.json               ← Step 2d (merged)
+t=10m  knowledge/extraction-notes.md
+t=10m  (knowledge sources uploaded to gateway)       ← UI shows Sources view
+
+t=12m  topics.json                                  ← Step 3
+t=14m  relations.json                               ← Step 3 (relation-builder)
+t=14m  (topics + relations uploaded to gateway)      ← UI shows Canvas view
+
+t=15m  training.jsonl (growing)                     ← Step 4 (records appear incrementally)
+t=25m  training.jsonl (final)                       ← Step 4 done
+t=25m  (records uploaded to gateway)                 ← UI shows Table view
+
+t=27m  grader.js                                    ← Step 5
+t=27m  (grader uploaded to gateway)                  ← UI shows evaluation ready
+
+t=27m  data-quality-report.json                      ← Step 5.5b (data quality gate)
+t=28m  (verified all data in gateway DB)             ← Step 6 done
+
+t=29m  evaluations/eval-001.json (creating)         ← Step 7b (eval-only, no training yet)
+t=74m  evaluations/eval-001.json (results)           ← eval complete
+t=74m  (readiness gate check)                        ← Step 7c
+t=74m  [PASS] → training starts                      ← Step 7d
+t=74m  training-jobs/train-001.json (creating)       ← training job
+t=74m  training-monitor launched (background)        ← Step 7e
+t=2-4h training-jobs/train-001.json (complete)       ← training done
+t=2-4h training-jobs/{JOB_ID}-metrics.json           ← monitor metrics saved
+t=2-4h iterations.md (updated)                       ← Step 8d
+```
+
+## Monitoring a Running Skill Agent
+
+Use this one-liner to check progress at any time. Set `PROJECT_DIR` to your test workspace:
+
+```bash
+PROJECT_DIR=finetune-project
+
+echo "=== Execution Log (last 5 lines) ==="
+tail -5 "$PROJECT_DIR/execution-log.md" 2>/dev/null || echo "  (not started)"
+
+echo -e "\n=== Docling Results ==="
+ls -lh "$PROJECT_DIR/knowledge/*/docling-result.json" 2>/dev/null || echo "  (none yet)"
+
+echo -e "\n=== Knowledge Parts ==="
+for f in "$PROJECT_DIR/knowledge/*/knowledge_parts.json"; do
+  [ -f "$f" ] && echo "  $f: $(python3 -c "import json; print(len(json.load(open('$f')).get('parts',[])))" 2>/dev/null) parts"
+done
+ls "$PROJECT_DIR/knowledge/all-parts-index.json" 2>/dev/null && echo "  Merged index: YES" || echo "  Merged index: NO"
+
+echo -e "\n=== Topics ==="
+[ -f "$PROJECT_DIR/topics.json" ] && python3 -c "import json; t=json.load(open('$PROJECT_DIR/topics.json')); print(f'  {len(t)} topics')" 2>/dev/null || echo "  (not created)"
+
+echo -e "\n=== Relations ==="
+[ -f "$PROJECT_DIR/relations.json" ] && python3 -c "import json; r=json.load(open('$PROJECT_DIR/relations.json')); print(f'  {len(r)} relations')" 2>/dev/null || echo "  (not created)"
+
+echo -e "\n=== Training Data ==="
+[ -f "$PROJECT_DIR/training.jsonl" ] && echo "  $(wc -l < "$PROJECT_DIR/training.jsonl") records" || echo "  (not started)"
+
+echo -e "\n=== Grader ==="
+[ -f "$PROJECT_DIR/grader.js" ] && echo "  YES ($(wc -l < "$PROJECT_DIR/grader.js") lines)" || echo "  (not written)"
+
+echo -e "\n=== Gateway DB ==="
+DB=~/.vllora/vllora.db
+WF_ID=$(sqlite3 $DB "SELECT id FROM workflows ORDER BY created_at DESC LIMIT 1;" 2>/dev/null)
+if [ -n "$WF_ID" ]; then
+  echo "  Workflow: $WF_ID"
+  echo "  Records: $(sqlite3 $DB "SELECT COUNT(*) FROM workflow_records WHERE workflow_id='$WF_ID';")"
+  echo "  Topics: $(sqlite3 $DB "SELECT COUNT(*) FROM workflow_topics WHERE workflow_id='$WF_ID';")"
+  echo "  Sources: $(sqlite3 $DB "SELECT COUNT(*) FROM knowledge_sources WHERE workflow_id='$WF_ID';")"
+else
+  echo "  (no workflow found)"
+fi
+```

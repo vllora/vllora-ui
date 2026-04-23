@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>All Sources — Redesign Mockup v2</title>
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0a0a0a; color: #d4d4d8; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; height: 100vh; display: flex; flex-direction: column; }
+  [data-lucide] { width: 14px; height: 14px; stroke-width: 1.8; }
+
+  .header-bar { padding: 8px 16px; border-bottom: 1px solid #1e1e1e; font-size: 11px; color: #52525b; display: flex; align-items: center; gap: 8px; }
+  .header-bar strong { color: #a1a1aa; }
+
+  .main { flex: 1; overflow-y: auto; padding: 20px; max-width: 1200px; }
+
+  /* Summary stats */
+  .stats-row { display: flex; gap: 12px; margin-bottom: 20px; }
+  .stat-card { flex: 1; padding: 12px 16px; border-radius: 8px; border: 1px solid #1e1e1e; background: #111; }
+  .stat-card .stat-value { font-size: 22px; font-weight: 700; color: #e4e4e7; font-family: ui-monospace, monospace; }
+  .stat-card .stat-label { font-size: 10px; color: #52525b; text-transform: uppercase; letter-spacing: 0.06em; margin-top: 2px; }
+  .stat-card.highlight .stat-value { color: #10b981; }
+  .stat-card.warn .stat-value { color: #f59e0b; }
+
+  /* Coverage matrix */
+  .matrix-section { margin-bottom: 24px; }
+  .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .section-header h3 { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #71717a; display: flex; align-items: center; gap: 6px; }
+
+  .matrix-container { border: 1px solid #1e1e1e; border-radius: 8px; overflow: hidden; }
+
+  .matrix { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .matrix th { padding: 8px 10px; text-align: left; font-weight: 500; color: #71717a; background: #141414; border-bottom: 1px solid #1e1e1e; position: sticky; top: 0; z-index: 1; }
+  .matrix th.doc-col { text-align: center; min-width: 80px; max-width: 120px; font-size: 10px; }
+  .matrix th.doc-col .doc-label { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .matrix th.doc-col .doc-parts { display: block; font-size: 9px; color: #3f3f46; font-weight: 400; margin-top: 1px; }
+  .matrix th.total-col { text-align: center; min-width: 60px; font-size: 10px; color: #52525b; }
+  .matrix th.status-col { text-align: center; width: 70px; font-size: 10px; }
+
+  .matrix td { padding: 0; border-bottom: 1px solid #1a1a1a; }
+  .matrix tbody tr:hover { background: rgba(255,255,255,0.015); }
+  .matrix tbody tr.gap-row { background: rgba(239,68,68,0.02); }
+
+  /* Topic cell — supports hierarchy indent */
+  .topic-cell { padding: 6px 10px; display: flex; align-items: center; gap: 4px; color: #a1a1aa; max-width: 200px; }
+  .topic-cell.parent { font-weight: 600; color: #d4d4d8; }
+  .topic-cell .indent { display: inline-block; flex-shrink: 0; }
+  .topic-cell .topic-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .topic-cell .expand-icon { color: #3f3f46; cursor: pointer; flex-shrink: 0; }
+
+  /* Coverage cell */
+  .cov-cell { text-align: center; padding: 4px 6px; }
+  .cov-dot { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; padding: 2px 6px; border-radius: 10px; font-size: 9px; font-family: ui-monospace, monospace; font-weight: 500; }
+  .cov-dot.high { background: #10b98118; color: #10b981; }
+  .cov-dot.mid { background: #f59e0b15; color: #f59e0b; }
+  .cov-dot.low { background: #ef444412; color: #ef4444; }
+  .cov-dot.none { color: #27272a; }
+  .cov-dot.gap { background: #ef444408; color: #52525b; font-style: italic; font-size: 8px; }
+
+  /* Total cell */
+  .total-cell { text-align: center; padding: 4px 6px; font-family: ui-monospace, monospace; font-size: 10px; color: #71717a; }
+  .total-cell.good { color: #10b981; }
+  .total-cell.warn { color: #f59e0b; }
+  .total-cell.bad { color: #ef4444; }
+
+  /* Status cell */
+  .status-cell { text-align: center; padding: 4px 6px; }
+  .status-badge { font-size: 9px; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
+  .status-badge.covered { background: #10b98115; color: #10b981; }
+  .status-badge.partial { background: #f59e0b15; color: #f59e0b; }
+  .status-badge.missing { background: #ef444415; color: #ef4444; }
+
+  /* Legend */
+  .legend { margin-top: 8px; display: flex; gap: 16px; font-size: 10px; color: #52525b; align-items: center; }
+  .legend-item { display: flex; align-items: center; gap: 4px; }
+
+  /* Document table */
+  .doc-section { margin-bottom: 20px; }
+
+  .doc-table { width: 100%; border-collapse: collapse; font-size: 11px; border: 1px solid #1e1e1e; border-radius: 8px; overflow: hidden; }
+  .doc-table th { padding: 8px 12px; text-align: left; font-weight: 500; color: #52525b; background: #141414; border-bottom: 1px solid #1e1e1e; }
+  .doc-table th.right { text-align: right; }
+  .doc-table td { padding: 10px 12px; border-bottom: 1px solid #1a1a1a; }
+  .doc-table tr { cursor: pointer; transition: background 0.15s; }
+  .doc-table tbody tr:hover { background: rgba(255,255,255,0.02); }
+  .doc-table .doc-name { color: #e4e4e7; font-weight: 500; display: flex; align-items: center; gap: 8px; }
+  .doc-table .doc-meta { font-size: 10px; color: #3f3f46; margin-top: 2px; padding-left: 22px; }
+  .doc-table .mono { font-family: ui-monospace, monospace; color: #a1a1aa; text-align: right; }
+  .doc-table .coverage-bar { width: 60px; height: 4px; background: #1e1e1e; border-radius: 2px; overflow: hidden; display: inline-block; vertical-align: middle; margin-right: 6px; }
+  .doc-table .coverage-fill { height: 100%; border-radius: 2px; }
+  .doc-table .coverage-text { font-family: ui-monospace, monospace; font-size: 10px; }
+
+  /* Summary row in matrix */
+  .matrix tfoot td { padding: 6px 10px; background: #141414; border-top: 1px solid #1e1e1e; font-weight: 600; font-size: 10px; color: #71717a; }
+  .matrix tfoot .cov-cell { font-weight: 700; }
+</style>
+</head>
+<body>
+
+<div class="header-bar">
+  <strong>All Sources — Interactive Mockup v2</strong>
+  Coverage matrix with topic hierarchy, status badges, and document summary table
+</div>
+
+<div class="main">
+
+  <!-- Summary stats -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-value">3</div>
+      <div class="stat-label">Documents</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">271</div>
+      <div class="stat-label">Parts Extracted</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">157K</div>
+      <div class="stat-label">Total Characters</div>
+    </div>
+    <div class="stat-card highlight">
+      <div class="stat-value">9 / 11</div>
+      <div class="stat-label">Topics Covered</div>
+    </div>
+    <div class="stat-card warn">
+      <div class="stat-value">2</div>
+      <div class="stat-label">Coverage Gaps</div>
+    </div>
+  </div>
+
+  <!-- Coverage matrix with hierarchy -->
+  <div class="matrix-section">
+    <div class="section-header">
+      <h3><i data-lucide="grid-3x3" style="width:13px;height:13px;"></i> Topic × Source Coverage</h3>
+    </div>
+
+    <div class="matrix-container">
+      <table class="matrix">
+        <thead>
+          <tr>
+            <th style="width:200px;">Topic</th>
+            <th class="doc-col">
+              <span class="doc-label">Chess Strategy</span>
+              <span class="doc-parts">9 parts</span>
+            </th>
+            <th class="doc-col">
+              <span class="doc-label">Chess Tactics</span>
+              <span class="doc-parts">197 parts</span>
+            </th>
+            <th class="doc-col">
+              <span class="doc-label">Learn Progressive</span>
+              <span class="doc-parts">55 parts</span>
+            </th>
+            <th class="total-col">Total</th>
+            <th class="status-col">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- Parent: Chess Fundamentals -->
+          <tr>
+            <td><div class="topic-cell parent"><i data-lucide="chevron-down" class="expand-icon" style="width:12px;height:12px;"></i> <span class="topic-name">Chess Fundamentals</span></div></td>
+            <td class="cov-cell"><span class="cov-dot high">8</span></td>
+            <td class="cov-cell"><span class="cov-dot high">26</span></td>
+            <td class="cov-cell"><span class="cov-dot none">—</span></td>
+            <td class="total-cell good">34</td>
+            <td class="status-cell"><span class="status-badge covered">covered</span></td>
+          </tr>
+          <!-- Child: Board Setup -->
+          <tr>
+            <td><div class="topic-cell"><span class="indent" style="width:20px;"></span> <span class="topic-name">Board Setup & Notation</span></div></td>
+            <td class="cov-cell"><span class="cov-dot high">3</span></td>
+            <td class="cov-cell"><span class="cov-dot high">12</span></td>
+            <td class="cov-cell"><span class="cov-dot none">—</span></td>
+            <td class="total-cell good">15</td>
+            <td class="status-cell"><span class="status-badge covered">covered</span></td>
+          </tr>
+          <!-- Child: Piece Movement -->
+          <tr>
+            <td><div class="topic-cell"><span class="indent" style="width:20px;"></span> <span class="topic-name">Piece Movement & Values</span></div></td>
+            <td class="cov-cell"><span class="cov-dot mid">2</span></td>
+            <td class="cov-cell"><span class="cov-dot high">14</span></td>
+            <td class="cov-cell"><span class="cov-dot none">—</span></td>
+            <td class="total-cell good">16</td>
+            <td class="status-cell"><span class="status-badge covered">covered</span></td>
+          </tr>
+          <!-- Child: Basic Checkmates -->
+          <tr>
+            <td><div class="topic-cell"><span class="indent" style="width:20px;"></span> <span class="topic-name">Basic Checkmates</span></div></td>
+            <td class="cov-cell"><span class="cov-dot high">3</span></td>
+            <td class="cov-cell"><span class="cov-dot none">—</span></td>
+            <td class="cov-cell"><span class="cov-dot none">—</span></td>
+            <td class="total-cell warn">3</td>
+            <td class="status-cell"><span class="status-badge partial">partial</span></td>
+          </tr>
+
+          <!-- Parent: Tactical Patterns -->
+          <tr>
+            <td><div class="topic-cell parent"><i data-lucide="chevron-down" class="expand-icon" style="width:12px;height:12px;"></i> <span class="topic-name">Tactical Patterns</span></div></td>
+            <td class="cov-cell"><span class="cov-dot mid">2</span></td>
+            <td class="cov-cell"><span class="cov-dot high">67</span></td>
+            <td class="cov-cell"><span class="cov-dot mid">1</span></td>
+            <td class="total-cell good">70</td>
+            <td class="status-cell"><span class="status-badge covered">covered</span></td>
+          </tr>
+          <!-- Children -->
+          <tr>
+            <td><div class="topic-cell"><span class="indent" style="width:20px;"></span> <span class="topic-name">Forks & Double Attacks</span></div></td>
+            <td class="cov-cell"><span class="cov-dot none">—</span></td>
+            <td class="cov-cell"><span class="cov-dot high">14</span></td>
+            <td class="cov-cell"><span class="cov-dot none">—</span></td>
+            <td class="total-cell good">14</td>
+            <td class="status-cell"><span class="status-badge covered">covered</span></td>
+          </tr>
+          <tr>
+            <td><div class="topic-cell"><span class="indent" style="width:20px;"></span> <span class="topic-name">Pins & Skewers</span></div></td>
+            <td class="cov-cell"><span class="cov-dot mid">1</span></td>
+            <td class="cov-cell"><span class="cov-dot high">14</span></td>
+            <td class="cov-cell"><span class="cov-dot none">—</span></td>
+            <td class="total-cell good">15</td>
+            <td class="status-cell"><span class="status-badge covered">covered</span></td>
+          </tr>
+          <tr>
+            <td><div class="topic-cell"><span class="indent" style="width:20px;"></span> <span class="topic-name">Discovered Attacks</span></div></td>
+            <td class="cov-cell"><span class="cov-dot none">—</span></td>
+            <td class="cov-cell"><span class="cov-dot high">11</span></td>
+            <td class="cov-cell"><span class="cov-dot none">—</span></td>
+            <td class="total-cell good">11</td>
+            <td class="status-cell"><span class="status-badge covered">covered</span></td>
+          </tr>
+          <tr>
+            <td><div class="topic-cell"><span class="indent" style="width:20px;"></span> <span class="topic-name">Deflection & Decoy</span></div></td>
+            <td class="cov-cell"><span class="cov-dot none">—</span></td>
+            <td class="cov-cell"><span class="cov-dot high">10</span></td>
+            <td class="cov-cell"><span class="cov-dot none">—</span></td>
+            <td class="total-cell good">10</td>
+            <td class="status-cell"><span class="status-badge covered">covered</span></td>
+          </tr>
+          <tr>
+            <td><div class="topic-cell"><span class="indent" style="width:20px;"></span> <span class="topic-name">Overloading & Undermining</span></div></td>
+            <td class="cov-cell"><span class="cov-dot mid">1</span></td>
+            <td class="cov-cell"><span class="cov-dot high">10</span></td>
+            <td class="cov-cell"><span class="cov-dot none">—</span></td>
+            <td class="total-cell good">11</td>
+            <td class="status-cell"><span class="status-badge covered">covered</span></td>
+          </tr>
+
+          <!-- Parent: Positional Play (with gaps) -->
+          <tr>
+            <td><div class="topic-cell parent"><i data-lucide="chevron-down" class="expand-icon" style="width:12px;height:12px;"></i> <span class="topic-name">Positional Play & Strategy</span></div></td>
+            <td class="cov-cell"><span class="cov-dot high">4</span></td>
+            <td class="cov-cell"><span class="cov-dot mid">2</span></td>
+            <td class="cov-cell"><span class="cov-dot high">3</span></td>
+            <td class="total-cell warn">9</td>
+            <td class="status-cell"><span class="status-badge partial">partial</span></td>
+          </tr>
+          <tr>
+            <td><div class="topic-cell"><span class="indent" style="width:20px;"></span> <span class="topic-name">Opening Principles</span></div></td>
+            <td class="cov-cell"><span class="cov-dot high">3</span></td>
+            <td class="cov-cell"><span class="cov-dot mid">2</span></td>
+            <td class="cov-cell"><span class="cov-dot mid">2</span></td>
+            <td class="total-cell good">7</td>
+            <td class="status-cell"><span class="status-badge covered">covered</span></td>
+          </tr>
+          <tr>
+            <td><div class="topic-cell"><span class="indent" style="width:20px;"></span> <span class="topic-name">Positional Concepts</span></div></td>
+            <td class="cov-cell"><span class="cov-dot mid">1</span></td>
+            <td class="cov-cell"><span class="cov-dot none">—</span></td>
+            <td class="cov-cell"><span class="cov-dot mid">1</span></td>
+            <td class="total-cell warn">2</td>
+            <td class="status-cell"><span class="status-badge partial">partial</span></td>
+          </tr>
+
+          <!-- Gap rows -->
+          <tr class="gap-row">
+            <td><div class="topic-cell"><span class="indent" style="width:20px;"></span> <span class="topic-name" style="color:#ef4444;">Endgame Technique</span></div></td>
+            <td class="cov-cell"><span class="cov-dot gap">gap</span></td>
+            <td class="cov-cell"><span class="cov-dot gap">gap</span></td>
+            <td class="cov-cell"><span class="cov-dot gap">gap</span></td>
+            <td class="total-cell bad">0</td>
+            <td class="status-cell"><span class="status-badge missing">missing</span></td>
+          </tr>
+          <tr class="gap-row">
+            <td><div class="topic-cell"><span class="indent" style="width:20px;"></span> <span class="topic-name" style="color:#ef4444;">Game Analysis & Evaluation</span></div></td>
+            <td class="cov-cell"><span class="cov-dot gap">gap</span></td>
+            <td class="cov-cell"><span class="cov-dot gap">gap</span></td>
+            <td class="cov-cell"><span class="cov-dot gap">gap</span></td>
+            <td class="total-cell bad">0</td>
+            <td class="status-cell"><span class="status-badge missing">missing</span></td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <td style="font-weight:600;color:#71717a;">Total</td>
+            <td class="cov-cell" style="font-weight:700;color:#a1a1aa;">14</td>
+            <td class="cov-cell" style="font-weight:700;color:#a1a1aa;">95</td>
+            <td class="cov-cell" style="font-weight:700;color:#a1a1aa;">4</td>
+            <td class="total-cell" style="font-weight:700;color:#d4d4d8;">113</td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <div class="legend">
+      <span class="legend-item"><span class="cov-dot high" style="min-width:auto;padding:1px 5px;">5</span> 3+ parts (good)</span>
+      <span class="legend-item"><span class="cov-dot mid" style="min-width:auto;padding:1px 5px;">2</span> 1-2 parts (partial)</span>
+      <span class="legend-item"><span class="cov-dot gap" style="min-width:auto;padding:1px 5px;">gap</span> No coverage</span>
+      <span class="legend-item"><span class="cov-dot none" style="min-width:auto;padding:1px 5px;">—</span> Not linked</span>
+    </div>
+  </div>
+
+  <!-- Documents table -->
+  <div class="doc-section">
+    <div class="section-header">
+      <h3><i data-lucide="file-text" style="width:13px;height:13px;"></i> Documents</h3>
+    </div>
+    <table class="doc-table">
+      <thead>
+        <tr>
+          <th>Document</th>
+          <th class="right">Parts</th>
+          <th class="right">Chars</th>
+          <th class="right" style="width:100px;">Topics</th>
+          <th class="right" style="width:140px;">Coverage</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            <div class="doc-name">
+              <i data-lucide="file-text" style="width:14px;height:14px;color:#52525b;flex-shrink:0"></i>
+              Chess Strategy (Edward Lasker, 2nd Edition)
+            </div>
+            <div class="doc-meta">Extracted via Docling · 142 pages · 2.3 MB</div>
+          </td>
+          <td class="mono">9</td>
+          <td class="mono">97K</td>
+          <td class="mono">6 / 11</td>
+          <td class="mono" style="text-align:right;">
+            <span class="coverage-bar"><span class="coverage-fill" style="width:55%;background:#f59e0b;"></span></span>
+            <span class="coverage-text" style="color:#f59e0b;">55%</span>
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <div class="doc-name">
+              <i data-lucide="file-text" style="width:14px;height:14px;color:#52525b;flex-shrink:0"></i>
+              Chess Tactics and Combinations by Dave Regis
+            </div>
+            <div class="doc-meta">Extracted via Docling · 98 pages · 1.1 MB</div>
+          </td>
+          <td class="mono">197</td>
+          <td class="mono">62.7K</td>
+          <td class="mono">7 / 11</td>
+          <td class="mono" style="text-align:right;">
+            <span class="coverage-bar"><span class="coverage-fill" style="width:64%;background:#10b981;"></span></span>
+            <span class="coverage-text" style="color:#10b981;">64%</span>
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <div class="doc-name">
+              <i data-lucide="file-text" style="width:14px;height:14px;color:#52525b;flex-shrink:0"></i>
+              Learn and Master Progressive Chess
+            </div>
+            <div class="doc-meta">Extracted via Docling · 76 pages · 0.8 MB</div>
+          </td>
+          <td class="mono">55</td>
+          <td class="mono">57.1K</td>
+          <td class="mono">4 / 11</td>
+          <td class="mono" style="text-align:right;">
+            <span class="coverage-bar"><span class="coverage-fill" style="width:36%;background:#f59e0b;"></span></span>
+            <span class="coverage-text" style="color:#f59e0b;">36%</span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<script>
+  lucide.createIcons();
+
+  // Make chevrons toggle children (interactive demo)
+  document.querySelectorAll('.expand-icon').forEach(icon => {
+    icon.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const row = icon.closest('tr');
+      let next = row.nextElementSibling;
+      const isCollapsing = icon.style.transform !== 'rotate(-90deg)';
+
+      if (isCollapsing) {
+        icon.style.transform = 'rotate(-90deg)';
+        icon.style.transition = 'transform 0.15s';
+      } else {
+        icon.style.transform = '';
+        icon.style.transition = 'transform 0.15s';
+      }
+
+      // Toggle child rows (rows with indent)
+      while (next && next.querySelector('.indent')) {
+        next.style.display = isCollapsing ? 'none' : '';
+        next = next.nextElementSibling;
+      }
+    });
+  });
+</script>
+</body>
+</html>

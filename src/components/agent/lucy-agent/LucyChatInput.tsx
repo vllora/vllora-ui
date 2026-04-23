@@ -2,11 +2,12 @@
  * LucyChatInput
  *
  * Custom chat input for Lucy with clean design.
- * Features: auto-resize textarea, image attachments, voice input, browser preview toggle.
+ * Features: auto-resize textarea, file attachments (images, PDFs, docs),
+ * drag & drop support, voice input.
  */
 
-import { useCallback, useRef, useEffect, KeyboardEvent, ChangeEvent } from 'react';
-import { Send, Square, Paperclip, Mic, X } from 'lucide-react';
+import { useCallback, useRef, useEffect, useState, KeyboardEvent, ChangeEvent, DragEvent } from 'react';
+import { Send, Square, Paperclip, Mic, X, FileText, Upload } from 'lucide-react';
 import { DistriPart } from '@distri/core';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -22,6 +23,37 @@ export interface AttachedImage {
   base64: string; // Base64 data for sending
   mimeType: string;
   name: string;
+}
+
+/** Extended file attachment that supports non-image files */
+export interface AttachedFile extends AttachedImage {
+  /** Type of file for UI display */
+  fileType: 'image' | 'pdf' | 'document' | 'other';
+}
+
+/** Accepted file types for upload */
+const ACCEPTED_FILE_TYPES = [
+  'image/*',
+  'application/pdf',
+  '.pdf',
+  '.txt',
+  '.md',
+  '.json',
+  '.csv',
+].join(',');
+
+/** Check if a file is an image */
+function isImageFile(file: File): boolean {
+  return file.type.startsWith('image/');
+}
+
+/** Get file type category for display */
+function getFileType(file: File): AttachedFile['fileType'] {
+  if (file.type.startsWith('image/')) return 'image';
+  if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) return 'pdf';
+  if (['text/plain', 'text/markdown', 'application/json', 'text/csv'].includes(file.type) ||
+      file.name.match(/\.(txt|md|json|csv)$/)) return 'document';
+  return 'other';
 }
 
 export interface LucyChatInputProps {
@@ -42,12 +74,12 @@ export interface LucyChatInputProps {
   /** Optional className */
   className?: string;
 
-  // Image attachment props
-  /** Attached images */
+  // File attachment props
+  /** Attached images/files */
   attachedImages?: AttachedImage[];
-  /** Callback to remove an image */
+  /** Callback to remove an image/file */
   onRemoveImage?: (id: string) => void;
-  /** Callback to add images */
+  /** Callback to add images/files */
   onAddImages?: (files: FileList | File[]) => void;
 
   // Voice input props
@@ -72,7 +104,7 @@ export function LucyChatInput({
   disabled = false,
   placeholder = 'Type your message...',
   className,
-  // Image props
+  // File props
   attachedImages = [],
   onRemoveImage,
   onAddImages,
@@ -83,6 +115,11 @@ export function LucyChatInput({
 }: LucyChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dropZoneRef = useRef<HTMLDivElement>(null);
+
+  // Drag and drop state
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounterRef = useRef(0);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -93,28 +130,10 @@ export function LucyChatInput({
     }
   }, [value]);
 
-  // Handle keyboard shortcuts
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent<HTMLTextAreaElement>) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        if ((value.trim() || attachedImages.length > 0) && !isStreaming && !disabled) {
-          handleSend();
-        }
-      }
-    },
-    [value, attachedImages, isStreaming, disabled]
-  );
-
-  // Handle send with images
+  // Handle send — always sends/queues the message (never stops streaming)
   const handleSend = useCallback(() => {
-    if (isStreaming && onStop) {
-      onStop();
-      return;
-    }
-
     if (attachedImages.length > 0) {
-      // Send with images as DistriPart[]
+      // Send with files as DistriPart[]
       const parts: DistriPart[] = [];
 
       // Add text part if present
@@ -122,24 +141,62 @@ export function LucyChatInput({
         parts.push({ part_type: 'text', data: value.trim() });
       }
 
-      // Add image parts as base64 bytes
-      for (const img of attachedImages) {
-        parts.push({
-          part_type: 'image',
-          data: {
-            type: 'bytes' as const,
-            mime_type: img.mimeType,
-            data: img.base64,
-            name: img.name,
-          },
-        });
+      // Add file parts
+      for (const file of attachedImages) {
+        if (isImageFile(file.file)) {
+          // Images go as image parts
+          parts.push({
+            part_type: 'image',
+            data: {
+              type: 'bytes' as const,
+              mime_type: file.mimeType,
+              bytes: file.base64,
+              name: file.name,
+            },
+          });
+        } else {
+          // Non-image files: include as text with metadata
+          // The agent will receive this and can process via upload_knowledge_source
+          parts.push({
+            part_type: 'text',
+            data: `[Attached file: ${file.name} (${file.mimeType})]`,
+          });
+          // Also add the file data as a custom part that can be processed
+          parts.push({
+            part_type: 'file' as any,
+            data: {
+              type: 'bytes' as const,
+              mime_type: file.mimeType,
+              data: file.base64,
+              name: file.name,
+            },
+          });
+        }
       }
 
       onSend(parts);
     } else if (value.trim()) {
       onSend(value);
     }
-  }, [value, attachedImages, onSend, onStop, isStreaming]);
+  }, [value, attachedImages, onSend]);
+
+  // Handle stop streaming — separate from send
+  const handleStop = useCallback(() => {
+    if (onStop) onStop();
+  }, [onStop]);
+
+  // Handle keyboard shortcuts
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        if ((value.trim() || attachedImages.length > 0) && !disabled) {
+          handleSend();
+        }
+      }
+    },
+    [value, attachedImages, isStreaming, disabled, handleSend]
+  );
 
   // Handle file selection
   const handleFileSelect = useCallback(
@@ -168,36 +225,118 @@ export function LucyChatInput({
     }
   }, [onStartStreamingVoice]);
 
+  // ============================================================================
+  // Drag and Drop Handlers
+  // ============================================================================
+
+  const handleDragEnter = useCallback((e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current++;
+    if (e.dataTransfer?.items && e.dataTransfer.items.length > 0) {
+      setIsDragging(true);
+    }
+  }, []);
+
+  const handleDragLeave = useCallback((e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current--;
+    if (dragCounterRef.current === 0) {
+      setIsDragging(false);
+    }
+  }, []);
+
+  const handleDragOver = useCallback((e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleDrop = useCallback((e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    dragCounterRef.current = 0;
+
+    const files = e.dataTransfer?.files;
+    if (files && files.length > 0 && onAddImages) {
+      onAddImages(files);
+    }
+  }, [onAddImages]);
+
   const canSend = (value.trim().length > 0 || attachedImages.length > 0) && !disabled;
 
+  // Get file type info for display
+  const getFileTypeInfo = (file: AttachedImage) => {
+    const fileType = getFileType(file.file);
+    return { fileType, isImage: fileType === 'image' };
+  };
+
   return (
-    <div className={cn('border-t border-border p-4 bg-card', className)}>
-      {/* Attached images preview */}
+    <div
+      ref={dropZoneRef}
+      className={cn('border-t border-border/50 px-3 py-3 bg-background/80 backdrop-blur relative', className)}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      {/* Drag overlay */}
+      {isDragging && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-[rgba(var(--theme-500),0.1)] border-2 border-dashed border-[rgb(var(--theme-500))] rounded-lg backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-2 text-[rgb(var(--theme-600))]">
+            <Upload className="w-8 h-8" />
+            <span className="text-sm font-medium">Drop files here</span>
+            <span className="text-xs text-muted-foreground">Images, PDFs, or documents</span>
+          </div>
+        </div>
+      )}
+
+      {/* Attached files preview */}
       {attachedImages.length > 0 && (
         <div className="mb-3 flex flex-wrap gap-2">
-          {attachedImages.map((img) => (
-            <div
-              key={img.id}
-              className="relative group bg-secondary rounded-lg p-2 flex items-center gap-2 border border-border"
-            >
-              <img
-                src={img.preview}
-                alt={img.name}
-                className="w-12 h-12 object-cover rounded"
-              />
-              <div className="flex-1 min-w-0">
-                <p className="text-xs text-foreground truncate">{img.name}</p>
+          {attachedImages.map((file) => {
+            const { fileType, isImage } = getFileTypeInfo(file);
+            return (
+              <div
+                key={file.id}
+                className="relative group bg-secondary rounded-lg p-2 flex items-center gap-2 border border-border"
+              >
+                {isImage ? (
+                  <img
+                    src={file.preview}
+                    alt={file.name}
+                    className="w-12 h-12 object-cover rounded"
+                  />
+                ) : (
+                  <div className={cn(
+                    "w-12 h-12 rounded flex items-center justify-center",
+                    fileType === 'pdf' ? 'bg-red-500/10' : 'bg-blue-500/10'
+                  )}>
+                    {fileType === 'pdf' ? (
+                      <FileText className="w-6 h-6 text-red-500" />
+                    ) : (
+                      <FileText className="w-6 h-6 text-blue-500" />
+                    )}
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-foreground truncate">{file.name}</p>
+                  {!isImage && (
+                    <p className="text-[10px] text-muted-foreground uppercase">{fileType}</p>
+                  )}
+                </div>
+                {onRemoveImage && (
+                  <button
+                    onClick={() => onRemoveImage(file.id)}
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
               </div>
-              {onRemoveImage && (
-                <button
-                  onClick={() => onRemoveImage(img.id)}
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -214,18 +353,18 @@ export function LucyChatInput({
         </div>
       )}
 
-      {/* Hidden file input */}
+      {/* Hidden file input - now accepts more file types */}
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
+        accept={ACCEPTED_FILE_TYPES}
         multiple
         onChange={handleFileSelect}
         className="hidden"
       />
 
-      {/* Input container with focus ring */}
-      <div className="bg-secondary rounded-xl border border-input focus-within:border-[rgb(var(--theme-500))] focus-within:shadow-[0_0_0_3px_rgba(var(--theme-rgb),0.1)] transition-all">
+      {/* Input container */}
+      <div className="rounded-xl border border-border/30 hover:border-border/50 focus-within:border-[rgba(var(--theme-500),0.25)] transition-all">
         {/* Textarea */}
         <textarea
           ref={textareaRef}
@@ -233,63 +372,63 @@ export function LucyChatInput({
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
-          disabled={disabled || isStreaming}
+          disabled={disabled}
           rows={1}
-          className="w-full bg-transparent text-secondary-foreground placeholder-muted-foreground resize-none
-            focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed
-            max-h-[200px] overflow-y-auto px-4 pt-3 pb-2"
+          className="w-full bg-transparent text-foreground text-[13px] placeholder:text-muted-foreground/40 placeholder:text-[13px] resize-none
+            focus:outline-none disabled:opacity-50
+            max-h-[200px] overflow-y-auto px-3 pt-2.5 pb-1"
         />
 
-        {/* Bottom toolbar inside input */}
-        <div className="flex items-center justify-between gap-2 px-3 pb-2">
-          <div className="flex items-center gap-1">
-            {/* Attachment button */}
+        {/* Inline toolbar */}
+        <div className="flex items-center justify-between px-2 pb-1.5">
+          <div className="flex items-center">
             <button
               type="button"
               onClick={handleAttachClick}
               disabled={disabled || isStreaming || !onAddImages}
-              className="flex items-center justify-center h-8 w-8 rounded-md hover:bg-accent transition-colors disabled:opacity-50"
-              title="Attach image"
+              className="flex items-center justify-center h-7 w-7 rounded-md hover:bg-accent/40 transition-colors disabled:opacity-40"
+              title="Attach files"
             >
-              <Paperclip className="h-4 w-4 text-muted-foreground" />
+              <Paperclip className="h-3.5 w-3.5 text-muted-foreground/60" />
             </button>
 
-            {/* Voice button */}
             {voiceEnabled && (
               <button
                 type="button"
                 disabled={disabled || isStreaming || !onStartStreamingVoice}
                 onClick={handleVoiceClick}
-                className="flex items-center justify-center h-8 w-8 rounded-md hover:bg-accent transition-colors disabled:opacity-50"
+                className="flex items-center justify-center h-7 w-7 rounded-md hover:bg-accent/40 transition-colors disabled:opacity-40"
                 title={isStreamingVoice ? 'Listening...' : 'Voice input'}
               >
                 <Mic className={cn(
-                  'h-4 w-4',
-                  isStreamingVoice ? 'text-[rgb(var(--theme-500))] animate-pulse' : 'text-muted-foreground'
+                  'h-3.5 w-3.5',
+                  isStreamingVoice ? 'text-[rgb(var(--theme-500))] animate-pulse' : 'text-muted-foreground/60'
                 )} />
               </button>
             )}
           </div>
 
-          {/* Send/Stop button */}
-          <Button
-            onClick={handleSend}
-            disabled={!canSend && !isStreaming}
-            size="icon"
-            className={cn(
-              'h-8 w-8 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg',
-              isStreaming
-                ? 'bg-destructive hover:bg-destructive/90 text-white'
-                : 'bg-[rgb(var(--theme-600))] hover:bg-[rgb(var(--theme-700))] text-white dark:bg-[rgb(var(--theme-600))] dark:hover:bg-[rgb(var(--theme-700))]'
-            )}
-            title={isStreaming ? 'Stop' : 'Send message'}
-          >
-            {isStreaming ? (
-              <Square className="w-4 h-4 fill-current" />
-            ) : (
-              <Send className="w-4 h-4" />
-            )}
-          </Button>
+          {/* Single action button — morphs between Send and Stop */}
+          {isStreaming && !canSend ? (
+            <Button
+              onClick={handleStop}
+              size="icon"
+              className="h-7 w-7 shrink-0 rounded-lg bg-[rgb(var(--theme-600))] hover:bg-[rgb(var(--theme-700))] text-white"
+              title="Stop"
+            >
+              <Square className="w-3 h-3 fill-current" />
+            </Button>
+          ) : (
+            <Button
+              onClick={handleSend}
+              disabled={!canSend}
+              size="icon"
+              className="h-7 w-7 shrink-0 rounded-lg bg-[rgb(var(--theme-600))] hover:bg-[rgb(var(--theme-700))] text-white disabled:opacity-20"
+              title={isStreaming ? 'Queue message' : 'Send message'}
+            >
+              <Send className="w-3.5 h-3.5" />
+            </Button>
+          )}
         </div>
       </div>
     </div>

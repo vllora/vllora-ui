@@ -1,0 +1,403 @@
+/**
+ * Agent-prism theme customization for vLLora.
+ *
+ * Uses agent-prism's CSS variable API to match vLLora's dark aesthetic.
+ * All agent-prism behavior is preserved — only colors/surfaces change.
+ *
+ * Design intent:
+ *   - Background matches vLLora's near-black (hsl 0 0% 3.9%)
+ *   - Surfaces use subtle elevation via lightness steps (5% → 8% → 11%)
+ *   - Borders are faint (8-12% lightness) for clean separation
+ *   - Agent-prism's span-type colors (violet LLM, orange TOOL, blue AGENT)
+ *     are preserved but slightly muted to reduce contrast against the
+ *     darker background
+ *   - Brand accent uses vLLora's emerald instead of agent-prism's violet
+ */
+
+.agent-prism-wrapper {
+  /* ── Surfaces — matched to vLLora's hsl(0 0% 3.9%) background ── */
+  --agentprism-background: 15% 0.005 260;              /* base: ~hsl(0 0% 3.9%) */
+  --agentprism-foreground: 93% 0.005 260;              /* text: ~hsl(0 0% 93%) */
+  --agentprism-primary: 93% 0.005 260;
+  --agentprism-primary-foreground: 15% 0.005 260;
+  --agentprism-secondary: 22% 0.008 260;               /* card/elevated surface */
+  --agentprism-secondary-foreground: 60% 0.01 260;
+  --agentprism-muted: 19% 0.006 260;                   /* inset/recessed */
+  --agentprism-muted-foreground: 65% 0.008 260;
+  --agentprism-accent: 22% 0.008 260;
+  --agentprism-accent-foreground: 93% 0.005 260;
+
+  /* ── Brand — vLLora's emerald instead of violet ── */
+  --agentprism-brand: 69.6% 0.17 162.48;               /* emerald-500 */
+  --agentprism-brand-foreground: 100% 0 0;
+  --agentprism-brand-secondary: 70.5% 0.213 47.604;    /* keep orange for contrast */
+  --agentprism-brand-secondary-foreground: 100% 0 0;
+
+  /* ── Borders — very subtle, matching vLLora's --border: 0 0% 14.9% ── */
+  --agentprism-border: 24% 0.006 260;
+  --agentprism-border-subtle: 20% 0.005 260;
+  --agentprism-border-strong: 32% 0.008 260;
+  --agentprism-border-inverse: 90% 0.005 260;
+
+  /* ── Status — keep functional colors, muted backgrounds ── */
+  --agentprism-success: 69.6% 0.17 162.48;             /* emerald */
+  --agentprism-success-muted: 20% 0.04 162;
+  --agentprism-success-muted-foreground: 82% 0.12 162;
+
+  --agentprism-error: 63.7% 0.237 25.331;
+  --agentprism-error-muted: 20% 0.06 25;
+  --agentprism-error-muted-foreground: 78% 0.11 20;
+
+  --agentprism-warning: 79.5% 0.184 86;
+  --agentprism-warning-muted: 22% 0.05 55;
+  --agentprism-warning-muted-foreground: 85% 0.14 86;
+
+  --agentprism-pending: 69.6% 0.17 162.48;             /* emerald for pending */
+  --agentprism-pending-muted: 20% 0.04 162;
+  --agentprism-pending-muted-foreground: 82% 0.12 162;
+
+  /* ── Code — complementary to emerald brand ── */
+  --agentprism-code-string: 69.6% 0.17 162.48;
+  --agentprism-code-number: 79.5% 0.15 86;
+  --agentprism-code-key: 68% 0.16 250;
+  --agentprism-code-base: 65% 0.008 260;
+
+  /* ── Badge default ── */
+  --agentprism-badge-default: 22% 0.008 260;
+  --agentprism-badge-default-foreground: 65% 0.008 260;
+
+  /* ── LLM — violet/purple (agent-prism signature, slightly softer) ── */
+  --agentprism-avatar-llm: 58% 0.22 292;
+  --agentprism-badge-llm: 24% 0.07 292;
+  --agentprism-badge-llm-foreground: 78% 0.14 292;
+  --agentprism-timeline-llm: 58% 0.22 292;
+
+  /* ── Agent — blue ── */
+  --agentprism-avatar-agent: 55% 0.20 262;
+  --agentprism-badge-agent: 23% 0.06 262;
+  --agentprism-badge-agent-foreground: 72% 0.14 255;
+  --agentprism-timeline-agent: 55% 0.20 262;
+
+  /* ── Tool — orange (warm contrast) ── */
+  --agentprism-avatar-tool: 70% 0.19 48;
+  --agentprism-badge-tool: 26% 0.06 42;
+  --agentprism-badge-tool-foreground: 84% 0.14 60;
+  --agentprism-timeline-tool: 70% 0.19 48;
+
+  /* ── Chain — teal ── */
+  --agentprism-avatar-chain: 70% 0.13 185;
+  --agentprism-badge-chain: 23% 0.04 192;
+  --agentprism-badge-chain-foreground: 82% 0.12 181;
+  --agentprism-timeline-chain: 70% 0.13 185;
+
+  /* ── Retrieval — sky ── */
+  --agentprism-avatar-retrieval: 66% 0.14 237;
+  --agentprism-badge-retrieval: 23% 0.04 248;
+  --agentprism-badge-retrieval-foreground: 80% 0.11 230;
+  --agentprism-timeline-retrieval: 66% 0.14 237;
+
+  /* ── Embedding — indigo ── */
+  --agentprism-avatar-embedding: 56% 0.20 277;
+  --agentprism-badge-embedding: 24% 0.07 286;
+  --agentprism-badge-embedding-foreground: 76% 0.13 275;
+  --agentprism-timeline-embedding: 56% 0.20 277;
+
+  /* ── Guardrail — yellow ── */
+  --agentprism-avatar-guardrail: 79.5% 0.184 86;
+  --agentprism-badge-guardrail: 22% 0.05 55;
+  --agentprism-badge-guardrail-foreground: 85% 0.14 86;
+  --agentprism-timeline-guardrail: 79.5% 0.184 86;
+
+  /* ── Create agent ── */
+  --agentprism-avatar-create-agent: 55% 0.20 262;
+  --agentprism-badge-create-agent: 23% 0.06 262;
+  --agentprism-badge-create-agent-foreground: 72% 0.14 255;
+  --agentprism-timeline-create-agent: 55% 0.20 262;
+
+  /* ── Span — neutral ── */
+  --agentprism-avatar-span: 45% 0.008 260;
+  --agentprism-badge-span: 22% 0.006 260;
+  --agentprism-badge-span-foreground: 60% 0.008 260;
+  --agentprism-timeline-span: 45% 0.008 260;
+
+  /* ── Event — pink ── */
+  --agentprism-avatar-event: 63% 0.22 354;
+  --agentprism-badge-event: 24% 0.07 354;
+  --agentprism-badge-event-foreground: 78% 0.13 0;
+  --agentprism-timeline-event: 63% 0.22 354;
+
+  /* ── Unknown — dim ── */
+  --agentprism-avatar-unknown: 38% 0.008 260;
+  --agentprism-badge-unknown: 22% 0.006 260;
+  --agentprism-badge-unknown-foreground: 50% 0.008 260;
+  --agentprism-timeline-unknown: 38% 0.008 260;
+
+  /* ── Layout ── */
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+
+  /* ── Glass effect on the wrapper ── */
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.03),
+    0 4px 24px rgba(0, 0, 0, 0.4),
+    0 1px 3px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.025) 0%,
+      transparent 40%
+    );
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+/* ── Inner surface glass tint — trace list panel ── */
+.agent-prism-wrapper > div > div:first-child,
+.agent-prism-wrapper > div > [class*="TraceList"] {
+  background: rgba(255, 255, 255, 0.015);
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* ── Flamegraph (TreeView / SpanCard) — mockup-aligned restyle ───────────
+ * The mock renders each span as a sparse three-column row:
+ *   [ tree-char name ] [ bar track ] [ duration ]
+ * Agent-prism's SpanCard has more chrome (avatar, connectors, status dot,
+ * type badges). We hide the redundant bits via CSS so the key signal —
+ * bars + names + duration — reads cleanly, matching the mock's density.
+ */
+
+/* Hide the avatar icon tile on every span row */
+.flame-wrap [role="treeitem"] [class*="Avatar"] {
+  display: none !important;
+}
+
+/* Hide the trailing status dot — agent-prism tags each span with a
+   success/error/pending/warning dot via aria-label="Status: …". The bar
+   color + row coloring already conveys this so the dot is redundant.
+   Also hide the dot's immediate wrapper (size-4 centering div) so the
+   duration column doesn't leave dangling whitespace. */
+.flame-wrap [role="treeitem"] [aria-label^="Status:"],
+.flame-wrap [role="treeitem"] [aria-label^="Status:"] ~ *,
+.flame-wrap [role="treeitem"] div.size-4:has([aria-label^="Status:"]) {
+  display: none !important;
+}
+
+/* Hide the LLM / TOOL / AGENT etc. type pills — info is already in the
+   row label (e.g. "ChatCompletion", tool name) and bar color. */
+.flame-wrap [role="treeitem"] [class*="bg-agentprism-badge-llm"],
+.flame-wrap [role="treeitem"] [class*="bg-agentprism-badge-tool"],
+.flame-wrap [role="treeitem"] [class*="bg-agentprism-badge-agent"],
+.flame-wrap [role="treeitem"] [class*="bg-agentprism-badge-embedding"],
+.flame-wrap [role="treeitem"] [class*="bg-agentprism-badge-chain"],
+.flame-wrap [role="treeitem"] [class*="bg-agentprism-badge-retrieval"],
+.flame-wrap [role="treeitem"] [class*="bg-agentprism-badge-guardrail"],
+.flame-wrap [role="treeitem"] [class*="bg-agentprism-badge-create-agent"],
+.flame-wrap [role="treeitem"] [class*="bg-agentprism-badge-span"],
+.flame-wrap [role="treeitem"] [class*="bg-agentprism-badge-event"],
+.flame-wrap [role="treeitem"] [class*="bg-agentprism-badge-unknown"] {
+  display: none !important;
+}
+
+/* Compact the per-row layout */
+.flame-wrap [role="treeitem"] > [role="button"] > div:nth-child(2) {
+  margin-bottom: 4px !important;
+}
+
+/* Title — smaller, mono */
+.flame-wrap [role="treeitem"] h3 {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace !important;
+  font-size: 10.5px !important;
+  font-weight: 400 !important;
+  line-height: 14px !important;
+  max-width: none !important;
+}
+
+/* Duration label — muted, smaller, mono */
+.flame-wrap [role="treeitem"] .text-agentprism-foreground.inline-block.w-14 {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace !important;
+  font-size: 10.5px !important;
+  color: oklch(0.48 0.012 170) !important;
+}
+
+/* Dim the connector lines so the bars pop */
+.flame-wrap [class*="SpanCardConnector"],
+.flame-wrap [class*="connector"] {
+  opacity: 0.35 !important;
+}
+
+/* Type badges (LLM / TOOL / AGENT pills) — shrink so they don't dominate */
+.flame-wrap [role="treeitem"] [class*="SpanCardBadges"] > * {
+  font-size: 9px !important;
+  padding: 1px 5px !important;
+  height: auto !important;
+}
+
+/* ── Timeline bar (Gantt) — mockup-aligned ──
+ * Agent-prism renders three nested spans for each bar:
+ *   outer  .bg-agentprism-secondary.rounded-md.h-4.min-w-20.flex-1   (track)
+ *   middle .absolute.inset-x-1.h-1.5.-translate-y-1/2                 (6px bar row)
+ *   inner  .absolute.h-full.bg-agentprism-timeline-{type}             (actual bar)
+ *
+ * The default h-1.5 bar is too thin — the mock shows fat, full-height bars
+ * that visually dominate the row. We expand the middle span to fill the
+ * track, keep a 2px inset so the bar doesn't touch the track edges, and
+ * recolor the track to a subtle white tint so the bar + track contrast
+ * matches the reference image.
+ */
+
+/* Track — uniquely identified by the combo .rounded-md + .min-w-20 + .flex-1
+   (agent-prism only uses min-w-20 on the timeline wrapper). */
+.flame-wrap [role="treeitem"] [class*="min-w-20"][class*="flex-1"] {
+  height: 20px !important;
+  background-color: rgba(255, 255, 255, 0.035) !important;
+  border-radius: 4px !important;
+  overflow: hidden;
+}
+
+/* Middle span (the positioning layer). Default is h-1.5 offset via
+   -translate-y-1/2; we replace that with a full-fill absolute box so the
+   inner bar spans the full track height. */
+.flame-wrap [role="treeitem"] [class*="min-w-20"][class*="flex-1"] > span {
+  position: absolute !important;
+  top: 2px !important;
+  bottom: 2px !important;
+  left: 2px !important;
+  right: 2px !important;
+  height: auto !important;
+  transform: none !important;
+}
+
+/* Actual bar — fills middle-span height, soft corners. */
+.flame-wrap [role="treeitem"] [class*="bg-agentprism-timeline"] {
+  height: 100% !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  border-radius: 3px !important;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+}
+
+/* Mute agent-prism's own selection highlight so our violet left-edge
+   marker (from `[aria-pressed="true"]` above) is the primary cue.
+   IMPORTANT: target the ::before pseudo-element, not the element itself —
+   otherwise the whole selected row goes transparent and vanishes. */
+.flame-wrap [role="treeitem"] [class*="before:bg-agentprism-muted"]::before {
+  display: none !important;
+}
+/* The isSelected gradient class is applied directly, so neutralize just
+   its backgroundImage (gradient) while leaving any other background alone. */
+.flame-wrap [role="treeitem"] [class*="bg-gradient-to-b"][class*="agentprism-muted"] {
+  background-image: none !important;
+}
+
+/* ── Subtle top highlight on the header/search area ── */
+.agent-prism-wrapper > div > div:nth-child(2) > div:first-child {
+  background: rgba(255, 255, 255, 0.01);
+}
+
+/* ── DetailsView restyling ─────────────────────────────────────────────
+ * The built-in DetailsView has a big header + nested tabs + collapsibles
+ * + JSON/Plain toggles. It's functionally rich but visually heavy in a
+ * narrow right pane. We tighten spacing, recolor the active tab to match
+ * our emerald brand (not white), and make the Input/Output sections
+ * flex-share the available vertical space instead of leaving dead zone
+ * below when the output is short.
+ */
+.details-view-wrap {
+  font-size: 12px;
+}
+
+/* Header row (big model name + LLM badge + latency) */
+.details-view-wrap h2,
+.details-view-wrap [class*="text-3xl"],
+.details-view-wrap [class*="text-2xl"] {
+  font-size: 13px !important;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+/* Tab bar — agent-prism uses data-state, not aria-selected.
+   Override the white underline it applies via border-agentprism-border-inverse. */
+.details-view-wrap [role="tablist"] {
+  border-bottom: 1px solid oklch(0.22 0.010 170) !important;
+}
+.details-view-wrap [role="tab"] {
+  font-size: 11px !important;
+  font-weight: 500 !important;
+}
+.details-view-wrap [role="tab"][data-state="active"] {
+  color: oklch(0.82 0.14 160) !important;
+  border-bottom-color: oklch(0.74 0.17 160) !important;
+}
+.details-view-wrap [role="tab"][data-state="inactive"] {
+  color: oklch(0.48 0.012 170) !important;
+}
+
+/* Input / Output collapsible headers */
+.details-view-wrap [class*="CollapsibleTrigger"],
+.details-view-wrap button[aria-expanded] {
+  font-size: 10px !important;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  color: oklch(0.48 0.012 170) !important;
+  padding: 4px 0 !important;
+}
+
+/* JSON / Plain toggle buttons */
+.details-view-wrap [class*="TabSelector"] button {
+  font-size: 10px !important;
+  padding: 2px 8px !important;
+  min-height: 0 !important;
+  height: 22px !important;
+}
+
+/* Body content cards (Input/Output panels) — soften */
+.details-view-wrap pre,
+.details-view-wrap [class*="bg-agentprism-muted"] {
+  background: oklch(0.125 0.008 170) !important;
+  border: 1px solid oklch(0.20 0.005 260) !important;
+  border-radius: 4px !important;
+  font-size: 11.5px !important;
+  line-height: 1.55 !important;
+  padding: 10px 12px !important;
+}
+
+/* ── Flex-fill layout so Input/Output share available vertical space.
+   Root tab content container → flex column, no intrinsic overflow. */
+.details-view-wrap > div > div:last-child {
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  padding-top: 12px !important;
+  padding-bottom: 4px !important;
+}
+
+/* space-y-4 wrapper under the In/Out tab */
+.details-view-wrap > div > div:last-child > div {
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+}
+
+/* Each Input/Output CollapsibleSection — flex-grow equally when expanded */
+.details-view-wrap > div > div:last-child > div > div {
+  flex: 1 1 0 !important;
+  min-height: 120px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+/* The body of each collapsible (the actual text block) scrolls internally */
+.details-view-wrap > div > div:last-child > div > div > [data-state="open"],
+.details-view-wrap > div > div:last-child > div > div > div:not(:first-child) {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+}

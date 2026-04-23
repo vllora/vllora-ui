@@ -7,6 +7,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 import { LabelInfo } from '@/services/labels-api';
 import { LabelBadge } from './LabelBadge';
+import { LabelTag } from '@/components/chat/traces/TraceRow/new-timeline/timeline-row/label-tag';
 
 export interface LabelFilterProps {
   /** Selected labels */
@@ -95,19 +96,19 @@ export function LabelFilter({
             size={size}
             className={cn(
               'w-full justify-between font-normal',
-              size === 'sm' ? 'h-8 text-xs' : 'h-10 text-sm',
+              size === 'sm' ? 'h-9 text-sm' : 'h-10 text-sm',
               !hasSelection && 'text-muted-foreground'
             )}
           >
             <span className="flex items-center gap-1.5">
-              <Tag className={cn(size === 'sm' ? 'h-3 w-3' : 'h-3.5 w-3.5')} />
+              <Tag className={cn(size === 'sm' ? 'h-3.5 w-3.5' : 'h-4 w-4')} />
               {hasSelection
                 ? `${selectedLabels.length} label${selectedLabels.length > 1 ? 's' : ''} selected`
                 : placeholder}
             </span>
             <ChevronDown className={cn(
               'opacity-50 transition-transform',
-              size === 'sm' ? 'h-3 w-3' : 'h-4 w-4',
+              size === 'sm' ? 'h-4 w-4' : 'h-4 w-4',
               open && 'rotate-180'
             )} />
           </Button>
@@ -161,11 +162,9 @@ export function LabelFilter({
                         onCheckedChange={() => toggleLabel(label.name)}
                         className="h-3.5 w-3.5"
                       />
-                      <span className="flex-1 text-xs truncate" title={label.name}>
-                        {label.name}
-                      </span>
+                      <LabelTag label={label.name} maxWidth={120} />
                       {showCounts && (
-                        <span className="text-[10px] text-muted-foreground tabular-nums">
+                        <span className="text-[10px] text-muted-foreground tabular-nums ml-auto">
                           ({label.count})
                         </span>
                       )}

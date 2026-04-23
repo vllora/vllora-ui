@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Record Row Design Exploration</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0a0a0f;
+    --bg-row: #111118;
+    --bg-row-hover: #16161f;
+    --bg-alt: #0e0e15;
+    --bg-card: #15151f;
+    --border: #1e1e2e;
+    --text: #e8e8f0;
+    --text-secondary: #9898b0;
+    --text-muted: #5a5a70;
+    --text-dim: #3a3a50;
+    --accent: #7c5cfc;
+    --emerald: #34d399;
+    --emerald-dim: rgba(52,211,153,0.12);
+    --amber: #fbbf24;
+    --amber-dim: rgba(251,191,36,0.12);
+    --red: #f87171;
+    --red-dim: rgba(248,113,113,0.1);
+    --blue: #60a5fa;
+    --blue-dim: rgba(96,165,250,0.1);
+    --cyan: #22d3ee;
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 40px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  h1 { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+  h2 { font-size: 14px; font-weight: 600; color: var(--accent); margin: 40px 0 12px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .desc { font-size: 12px; color: var(--text-muted); margin-bottom: 24px; line-height: 1.5; }
+
+  /* ── Shared table styles ── */
+  table { width: 100%; border-collapse: collapse; background: var(--bg-row); border-radius: 8px; overflow: hidden; margin-bottom: 8px; }
+  th { text-align: left; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--bg-alt); }
+  td { padding: 0 12px; height: 40px; font-size: 12px; border-bottom: 1px solid rgba(30,30,46,0.5); vertical-align: middle; }
+  tr:hover td { background: var(--bg-row-hover); }
+  tr { cursor: pointer; }
+
+  .col-num { width: 36px; color: var(--text-dim); font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+  .col-input { color: var(--text-secondary); }
+  .col-input:hover { color: var(--text); text-decoration: underline; }
+
+  /* ── Score pill ── */
+  .score { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500; padding: 2px 6px; border-radius: 4px; white-space: nowrap; }
+  .score.good { color: var(--emerald); background: var(--emerald-dim); }
+  .score.warn { color: var(--amber); background: var(--amber-dim); }
+  .score.bad  { color: var(--red); background: var(--red-dim); }
+  .score.none { color: var(--text-dim); background: transparent; }
+  .score.pending { color: var(--text-dim); font-style: italic; }
+
+  /* ── Source ref tag ── */
+  .source-ref { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; color: var(--text-muted); background: rgba(124,92,252,0.06); border: 1px solid rgba(124,92,252,0.12); border-radius: 4px; padding: 2px 6px; white-space: nowrap; max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+  .source-ref .icon { font-size: 9px; opacity: 0.6; }
+
+  /* ── Score header with job label ── */
+  .score-header { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+  .score-header .job-type { font-size: 8px; color: var(--text-dim); font-weight: 400; text-transform: none; letter-spacing: 0; }
+  .score-header .job-name { font-size: 10px; }
+
+  /* ── Trend indicator ── */
+  .trend { font-family: 'JetBrains Mono', monospace; font-size: 10px; margin-left: 2px; }
+  .trend.up { color: var(--emerald); }
+  .trend.down { color: var(--red); }
+  .trend.flat { color: var(--text-dim); }
+
+  /* ── Multi-score compact (for many jobs) ── */
+  .score-dots { display: flex; gap: 3px; align-items: center; }
+  .score-dot { width: 8px; height: 8px; border-radius: 50%; position: relative; cursor: pointer; }
+  .score-dot.good { background: var(--emerald); }
+  .score-dot.warn { background: var(--amber); }
+  .score-dot.bad { background: var(--red); }
+  .score-dot.none { background: var(--text-dim); opacity: 0.3; }
+  .score-dot-tooltip { display: none; position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); background: var(--bg-card); border: 1px solid var(--border); border-radius: 4px; padding: 4px 8px; font-size: 10px; white-space: nowrap; z-index: 10; }
+  .score-dot:hover .score-dot-tooltip { display: block; }
+
+  /* ── Source ref inline ── */
+  .source-inline { font-size: 10px; color: var(--text-dim); white-space: nowrap; }
+  .source-inline .part { color: var(--text-muted); }
+
+  /* ── Option labels ── */
+  .option-tag { display: inline-block; font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; padding: 2px 8px; border-radius: 10px; margin-bottom: 8px; }
+  .option-tag.recommended { background: var(--emerald-dim); color: var(--emerald); }
+  .option-tag.alternative { background: var(--blue-dim); color: var(--blue); }
+  .option-tag.compact { background: var(--amber-dim); color: var(--amber); }
+
+  /* ── Subgroup header ── */
+  .subgroup-row td { background: var(--bg-alt); padding: 6px 12px; height: 32px; }
+  .subgroup-row:hover td { background: var(--bg-alt); }
+  .subgroup-inner { display: flex; align-items: center; gap: 8px; }
+  .subgroup-name { font-weight: 600; font-size: 12px; color: var(--text); }
+  .subgroup-count { font-size: 10px; color: var(--text-dim); background: rgba(255,255,255,0.04); padding: 1px 6px; border-radius: 8px; }
+  .subgroup-meta { margin-left: auto; display: flex; gap: 12px; font-size: 10px; color: var(--text-muted); }
+  .tree-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--text-dim); }
+
+  /* ── Comparison section ── */
+  .comparison { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 24px; }
+  .comparison > div { min-width: 0; }
+
+  .notes { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-top: 8px; font-size: 11px; color: var(--text-muted); line-height: 1.6; }
+  .notes strong { color: var(--text-secondary); font-weight: 500; }
+
+  .divider { height: 1px; background: var(--border); margin: 40px 0; }
+</style>
+</head>
+<body>
+
+<h1>Record Row Design Exploration</h1>
+<p class="desc">
+  Records are input-only (no output/assistant message). The row needs to show:<br>
+  1. The input question &nbsp; 2. Scores from multiple eval/training jobs &nbsp; 3. Which source part the record is linked to
+</p>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<h2>Option A &mdash; Dedicated Score Columns per Job</h2>
+<span class="option-tag recommended">Recommended</span>
+<p class="desc">Each eval/training job gets its own column. Score header shows job name + type. Trend arrows show improvement between eval runs.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th class="col-num">#</th>
+      <th>Input</th>
+      <th style="width:120px">Source</th>
+      <th style="width:70px;text-align:center">
+        <div class="score-header"><span class="job-type">eval</span><span class="job-name">eval-v1</span></div>
+      </th>
+      <th style="width:70px;text-align:center">
+        <div class="score-header"><span class="job-type">eval</span><span class="job-name">eval-v2</span></div>
+      </th>
+      <th style="width:70px;text-align:center">
+        <div class="score-header"><span class="job-type">train</span><span class="job-name">ft-a13e</span></div>
+      </th>
+    </tr>
+  </thead>
+  <tbody>
+    <!-- Subgroup header -->
+    <tr class="subgroup-row">
+      <td colspan="6">
+        <div class="subgroup-inner">
+          <div class="tree-dot"></div>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+          <span class="subgroup-name">Forks</span>
+          <span class="subgroup-count">14</span>
+          <div class="subgroup-meta">
+            <span>avg 0.84</span>
+            <span>3 sources</span>
+          </div>
+        </div>
+      </td>
+    </tr>
+    <tr>
+      <td class="col-num">1</td>
+      <td class="col-input">Explain the knight fork tactic and why it's so effective</td>
+      <td><span class="source-ref"><span class="icon">&#128196;</span> ch.1 &sect;3 &mdash; Forks</span></td>
+      <td style="text-align:center"><span class="score good">0.93</span></td>
+      <td style="text-align:center"><span class="score good">0.95</span> <span class="trend up">&uarr;</span></td>
+      <td style="text-align:center"><span class="score good">0.91</span></td>
+    </tr>
+    <tr>
+      <td class="col-num">2</td>
+      <td class="col-input">What is a family fork in chess?</td>
+      <td><span class="source-ref"><span class="icon">&#128196;</span> ch.1 &sect;3 &mdash; Forks</span></td>
+      <td style="text-align:center"><span class="score good">0.88</span></td>
+      <td style="text-align:center"><span class="score good">0.90</span> <span class="trend up">&uarr;</span></td>
+      <td style="text-align:center"><span class="score good">0.87</span></td>
+    </tr>
+    <tr>
+      <td class="col-num">3</td>
+      <td class="col-input">How do you set up a knight fork?</td>
+      <td><span class="source-ref"><span class="icon">&#128196;</span> ch.2.1 &mdash; Take a piece</span></td>
+      <td style="text-align:center"><span class="score warn">0.72</span></td>
+      <td style="text-align:center"><span class="score warn">0.68</span> <span class="trend down">&darr;</span></td>
+      <td style="text-align:center"><span class="score warn">0.75</span></td>
+    </tr>
+    <tr>
+      <td class="col-num">4</td>
+      <td class="col-input">What pieces are best for executing forks?</td>
+      <td><span class="source-ref"><span class="icon">&#128196;</span> ch.1 &sect;3 &mdash; Forks</span></td>
+      <td style="text-align:center"><span class="score good">0.85</span></td>
+      <td style="text-align:center"><span class="score good">0.86</span> <span class="trend flat">&rarr;</span></td>
+      <td style="text-align:center"><span class="score none">&mdash;</span></td>
+    </tr>
+    <tr>
+      <td class="col-num">5</td>
+      <td class="col-input">Can you give an example of a pawn fork?</td>
+      <td><span class="source-ref"><span class="icon">&plus;</span> <em style="opacity:0.5">generated</em></span></td>
+      <td style="text-align:center"><span class="score good">0.81</span></td>
+      <td style="text-align:center"><span class="score good">0.83</span> <span class="trend up">&uarr;</span></td>
+      <td style="text-align:center"><span class="score pending">pending</span></td>
+    </tr>
+    <tr>
+      <td class="col-num">6</td>
+      <td class="col-input">How to defend against knight forks?</td>
+      <td></td>
+      <td style="text-align:center"><span class="score none">&mdash;</span></td>
+      <td style="text-align:center"><span class="score none">&mdash;</span></td>
+      <td style="text-align:center"><span class="score none">&mdash;</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="notes">
+  <strong>Pros:</strong> Clear, scannable. Each job's scores are directly comparable vertically. Trend arrows show improvement. Source ref shows the knowledge part lineage.<br>
+  <strong>Cons:</strong> Gets wide with many jobs (3-4 max before horizontal scroll). Column headers need abbreviation for long job names.<br>
+  <strong>Source column:</strong> Shows the knowledge source part this record was generated from. Empty = no link. "generated" = AI-generated without specific source.
+</div>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<div class="divider"></div>
+<h2>Option B &mdash; Inline Score Bar (compact)</h2>
+<span class="option-tag alternative">Alternative</span>
+<p class="desc">All scores in one column as colored dots. Hover for details. Source ref as a small tag. Works better when there are many jobs.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th class="col-num">#</th>
+      <th>Input</th>
+      <th style="width:140px">Source</th>
+      <th style="width:140px;text-align:center">Scores</th>
+      <th style="width:60px;text-align:center">Latest</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr class="subgroup-row">
+      <td colspan="5">
+        <div class="subgroup-inner">
+          <div class="tree-dot"></div>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+          <span class="subgroup-name">Forks</span>
+          <span class="subgroup-count">14</span>
+          <div class="subgroup-meta">
+            <span>avg 0.84</span>
+            <span>3 sources</span>
+          </div>
+        </div>
+      </td>
+    </tr>
+    <tr>
+      <td class="col-num">1</td>
+      <td class="col-input">Explain the knight fork tactic and why it's so effective</td>
+      <td><span class="source-ref"><span class="icon">&#128196;</span> ch.1 &sect;3 &mdash; Forks</span></td>
+      <td style="text-align:center">
+        <div class="score-dots">
+          <div class="score-dot good" title="eval-v1: 0.93"><div class="score-dot-tooltip">eval-v1: 0.93</div></div>
+          <div class="score-dot good" title="eval-v2: 0.95"><div class="score-dot-tooltip">eval-v2: 0.95</div></div>
+          <div class="score-dot good" title="ft-a13e: 0.91"><div class="score-dot-tooltip">ft-a13e: 0.91</div></div>
+          <span style="font-family:'JetBrains Mono';font-size:10px;color:var(--text-muted);margin-left:4px">3/3</span>
+        </div>
+      </td>
+      <td style="text-align:center"><span class="score good">0.95</span></td>
+    </tr>
+    <tr>
+      <td class="col-num">2</td>
+      <td class="col-input">What is a family fork in chess?</td>
+      <td><span class="source-ref"><span class="icon">&#128196;</span> ch.1 &sect;3 &mdash; Forks</span></td>
+      <td style="text-align:center">
+        <div class="score-dots">
+          <div class="score-dot good"><div class="score-dot-tooltip">eval-v1: 0.88</div></div>
+          <div class="score-dot good"><div class="score-dot-tooltip">eval-v2: 0.90</div></div>
+          <div class="score-dot good"><div class="score-dot-tooltip">ft-a13e: 0.87</div></div>
+          <span style="font-family:'JetBrains Mono';font-size:10px;color:var(--text-muted);margin-left:4px">3/3</span>
+        </div>
+      </td>
+      <td style="text-align:center"><span class="score good">0.90</span></td>
+    </tr>
+    <tr>
+      <td class="col-num">3</td>
+      <td class="col-input">How do you set up a knight fork?</td>
+      <td><span class="source-ref"><span class="icon">&#128196;</span> ch.2.1 &mdash; Take a piece</span></td>
+      <td style="text-align:center">
+        <div class="score-dots">
+          <div class="score-dot warn"><div class="score-dot-tooltip">eval-v1: 0.72</div></div>
+          <div class="score-dot warn"><div class="score-dot-tooltip">eval-v2: 0.68</div></div>
+          <div class="score-dot warn"><div class="score-dot-tooltip">ft-a13e: 0.75</div></div>
+          <span style="font-family:'JetBrains Mono';font-size:10px;color:var(--text-muted);margin-left:4px">3/3</span>
+        </div>
+      </td>
+      <td style="text-align:center"><span class="score warn">0.75</span></td>
+    </tr>
+    <tr>
+      <td class="col-num">4</td>
+      <td class="col-input">Can you give an example of a pawn fork?</td>
+      <td><span class="source-ref"><span class="icon">&plus;</span> <em style="opacity:0.5">generated</em></span></td>
+      <td style="text-align:center">
+        <div class="score-dots">
+          <div class="score-dot good"><div class="score-dot-tooltip">eval-v1: 0.81</div></div>
+          <div class="score-dot good"><div class="score-dot-tooltip">eval-v2: 0.83</div></div>
+          <div class="score-dot none"><div class="score-dot-tooltip">ft-a13e: pending</div></div>
+          <span style="font-family:'JetBrains Mono';font-size:10px;color:var(--text-muted);margin-left:4px">2/3</span>
+        </div>
+      </td>
+      <td style="text-align:center"><span class="score good">0.83</span></td>
+    </tr>
+    <tr>
+      <td class="col-num">5</td>
+      <td class="col-input">How to defend against knight forks?</td>
+      <td></td>
+      <td style="text-align:center">
+        <div class="score-dots">
+          <div class="score-dot none"></div>
+          <div class="score-dot none"></div>
+          <div class="score-dot none"></div>
+          <span style="font-family:'JetBrains Mono';font-size:10px;color:var(--text-dim);margin-left:4px">0/3</span>
+        </div>
+      </td>
+      <td style="text-align:center"><span class="score none">&mdash;</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="notes">
+  <strong>Pros:</strong> Scales to many jobs without getting wide. Colored dots give quick visual health check. Hover for details.<br>
+  <strong>Cons:</strong> Less precise at a glance &mdash; need to hover for exact scores. Hard to compare specific jobs across rows.<br>
+  <strong>Best for:</strong> When you have 5+ eval/training jobs and need a compact view.
+</div>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<div class="divider"></div>
+<h2>Option C &mdash; Hybrid (Latest + History)</h2>
+<span class="option-tag compact">Hybrid</span>
+<p class="desc">Shows the latest eval score prominently, with a compact sparkline of historical scores. Source ref integrated into the row.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th class="col-num">#</th>
+      <th>Input</th>
+      <th style="width:130px">Source</th>
+      <th style="width:90px;text-align:center">Score</th>
+      <th style="width:100px;text-align:center">History</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr class="subgroup-row">
+      <td colspan="5">
+        <div class="subgroup-inner">
+          <div class="tree-dot"></div>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+          <span class="subgroup-name">Forks</span>
+          <span class="subgroup-count">14</span>
+          <div class="subgroup-meta">
+            <span>avg 0.84</span>
+            <span>3 sources</span>
+          </div>
+        </div>
+      </td>
+    </tr>
+    <tr>
+      <td class="col-num">1</td>
+      <td class="col-input">Explain the knight fork tactic and why it's so effective</td>
+      <td><span class="source-ref"><span class="icon">&#128196;</span> ch.1 &sect;3 &mdash; Forks</span></td>
+      <td style="text-align:center">
+        <span class="score good">0.95</span>
+        <span class="trend up">&uarr;+0.02</span>
+      </td>
+      <td style="text-align:center">
+        <!-- Mini inline sparkline: E1 → E2 → T1 -->
+        <svg width="80" height="20" viewBox="0 0 80 20" style="vertical-align:middle">
+          <polyline points="5,6 35,4 65,7" fill="none" stroke="var(--emerald)" stroke-width="1.5" opacity="0.6"/>
+          <circle cx="5" cy="6" r="2.5" fill="var(--emerald)" opacity="0.5"/>
+          <circle cx="35" cy="4" r="2.5" fill="var(--emerald)" opacity="0.7"/>
+          <circle cx="65" cy="7" r="3" fill="var(--emerald)"/>
+          <text x="5" y="18" font-size="7" fill="var(--text-dim)" font-family="JetBrains Mono">E1</text>
+          <text x="32" y="18" font-size="7" fill="var(--text-dim)" font-family="JetBrains Mono">E2</text>
+          <text x="62" y="18" font-size="7" fill="var(--text-dim)" font-family="JetBrains Mono">T1</text>
+        </svg>
+      </td>
+    </tr>
+    <tr>
+      <td class="col-num">2</td>
+      <td class="col-input">What is a family fork in chess?</td>
+      <td><span class="source-ref"><span class="icon">&#128196;</span> ch.1 &sect;3 &mdash; Forks</span></td>
+      <td style="text-align:center">
+        <span class="score good">0.90</span>
+        <span class="trend up">&uarr;+0.02</span>
+      </td>
+      <td style="text-align:center">
+        <svg width="80" height="20" viewBox="0 0 80 20" style="vertical-align:middle">
+          <polyline points="5,8 35,6 65,7" fill="none" stroke="var(--emerald)" stroke-width="1.5" opacity="0.6"/>
+          <circle cx="5" cy="8" r="2.5" fill="var(--emerald)" opacity="0.5"/>
+          <circle cx="35" cy="6" r="2.5" fill="var(--emerald)" opacity="0.7"/>
+          <circle cx="65" cy="7" r="3" fill="var(--emerald)"/>
+          <text x="5" y="18" font-size="7" fill="var(--text-dim)" font-family="JetBrains Mono">E1</text>
+          <text x="32" y="18" font-size="7" fill="var(--text-dim)" font-family="JetBrains Mono">E2</text>
+          <text x="62" y="18" font-size="7" fill="var(--text-dim)" font-family="JetBrains Mono">T1</text>
+        </svg>
+      </td>
+    </tr>
+    <tr>
+      <td class="col-num">3</td>
+      <td class="col-input">How do you set up a knight fork?</td>
+      <td><span class="source-ref"><span class="icon">&#128196;</span> ch.2.1 &mdash; Take a piece</span></td>
+      <td style="text-align:center">
+        <span class="score warn">0.68</span>
+        <span class="trend down">&darr;-0.04</span>
+      </td>
+      <td style="text-align:center">
+        <svg width="80" height="20" viewBox="0 0 80 20" style="vertical-align:middle">
+          <polyline points="5,9 35,12 65,10" fill="none" stroke="var(--amber)" stroke-width="1.5" opacity="0.6"/>
+          <circle cx="5" cy="9" r="2.5" fill="var(--amber)" opacity="0.5"/>
+          <circle cx="35" cy="12" r="2.5" fill="var(--amber)" opacity="0.7"/>
+          <circle cx="65" cy="10" r="3" fill="var(--amber)"/>
+          <text x="5" y="18" font-size="7" fill="var(--text-dim)" font-family="JetBrains Mono">E1</text>
+          <text x="32" y="18" font-size="7" fill="var(--text-dim)" font-family="JetBrains Mono">E2</text>
+          <text x="62" y="18" font-size="7" fill="var(--text-dim)" font-family="JetBrains Mono">T1</text>
+        </svg>
+      </td>
+    </tr>
+    <tr>
+      <td class="col-num">4</td>
+      <td class="col-input">Can you give an example of a pawn fork?</td>
+      <td><span class="source-ref"><span class="icon">&plus;</span> <em style="opacity:0.5">generated</em></span></td>
+      <td style="text-align:center">
+        <span class="score good">0.83</span>
+      </td>
+      <td style="text-align:center">
+        <svg width="80" height="20" viewBox="0 0 80 20" style="vertical-align:middle">
+          <polyline points="5,8 35,7" fill="none" stroke="var(--emerald)" stroke-width="1.5" opacity="0.6"/>
+          <circle cx="5" cy="8" r="2.5" fill="var(--emerald)" opacity="0.5"/>
+          <circle cx="35" cy="7" r="3" fill="var(--emerald)"/>
+          <circle cx="65" cy="10" r="2.5" fill="var(--text-dim)" opacity="0.2" stroke="var(--text-dim)" stroke-width="1" stroke-dasharray="2"/>
+          <text x="5" y="18" font-size="7" fill="var(--text-dim)" font-family="JetBrains Mono">E1</text>
+          <text x="32" y="18" font-size="7" fill="var(--text-dim)" font-family="JetBrains Mono">E2</text>
+          <text x="62" y="18" font-size="7" fill="var(--text-dim)" font-family="JetBrains Mono">T1</text>
+        </svg>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="notes">
+  <strong>Pros:</strong> Best of both worlds &mdash; prominent latest score + visual trend history. Sparkline is space-efficient.<br>
+  <strong>Cons:</strong> More complex to implement. Sparkline can be hard to read at small sizes.<br>
+  <strong>Best for:</strong> When you want to emphasize improvement over time while keeping the table compact.
+</div>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<div class="divider"></div>
+<h2>Source Reference Display</h2>
+<p class="desc">How to show the link between a record and its knowledge source part.</p>
+
+<div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:24px;">
+  <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:16px;flex:1;min-width:200px;">
+    <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Style 1: Tag</div>
+    <span class="source-ref"><span class="icon">&#128196;</span> ch.1 &sect;3 &mdash; Forks</span>
+    <div style="font-size:10px;color:var(--text-muted);margin-top:6px;">Compact. Shows part reference + title.</div>
+  </div>
+  <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:16px;flex:1;min-width:200px;">
+    <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Style 2: Inline text</div>
+    <span class="source-inline"><span class="part">chess-tactics.pdf</span> &rsaquo; ch.1</span>
+    <div style="font-size:10px;color:var(--text-muted);margin-top:6px;">Simple. Shows filename + part.</div>
+  </div>
+  <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:16px;flex:1;min-width:200px;">
+    <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Style 3: Generated</div>
+    <span class="source-ref"><span class="icon">&plus;</span> <em style="opacity:0.5">generated</em></span>
+    <div style="font-size:10px;color:var(--text-muted);margin-top:6px;">For AI-generated records without source.</div>
+  </div>
+  <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:16px;flex:1;min-width:200px;">
+    <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Style 4: No link</div>
+    <span style="font-size:10px;color:var(--text-dim);">&mdash;</span>
+    <div style="font-size:10px;color:var(--text-muted);margin-top:6px;">Record has no source linkage.</div>
+  </div>
+</div>
+
+</body>
+</html>
+</content>
+</invoke>

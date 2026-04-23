@@ -1,4 +1,5 @@
 import colors from 'tailwindcss/colors'
+import { agentPrismTailwindColors } from './src/components/agent-prism/theme/index.ts'
 
 /** @type {import('tailwindcss').Config} */
 export default {
@@ -6,6 +7,7 @@ export default {
   content: [
     "./index.html",
     "./src/**/*.{ts,tsx,js,jsx}",
+    "./src/components/agent-prism/**/*.{ts,tsx}",
   ],
   safelist: [
     // Safelist theme colors to ensure they're always available
@@ -21,6 +23,7 @@ export default {
   	},
   	extend: {
   		colors: {
+  			...agentPrismTailwindColors,
   			border: 'hsl(var(--border))',
   			input: 'hsl(var(--input))',
   			ring: 'hsl(var(--ring))',
@@ -143,6 +146,26 @@ export default {
   				'50%': {
   					transform: 'scaleY(1)'
   				}
+  			},
+  			'loading-progress': {
+  				'0%': { width: '0%' },
+  				'50%': { width: '100%' },
+  				'100%': { width: '0%' }
+  			},
+  			'record-highlight': {
+  				'0%': {
+  					boxShadow: 'inset 0 0 0 1.5px rgba(139,92,246,0.8), 0 0 12px 2px rgba(139,92,246,0.2)',
+  				},
+  				'40%': {
+  					boxShadow: 'inset 0 0 0 1.5px rgba(139,92,246,0.5), 0 0 6px 1px rgba(139,92,246,0.1)',
+  				},
+  				'100%': {
+  					boxShadow: 'inset 0 0 0 0px rgba(139,92,246,0), 0 0 0px 0px rgba(139,92,246,0)',
+  				},
+  			},
+  			'pulse-out': {
+  				'0%, 100%': { transform: 'scale(1)', opacity: '1' },
+  				'50%': { transform: 'scale(1.08)', opacity: '0.5' },
   			}
   		},
   		animation: {
@@ -152,7 +175,10 @@ export default {
   			'glow-pulse': 'glow-pulse 2s ease-in-out infinite',
   			'progress-slide': 'progress-slide 1.5s ease-in-out infinite',
   			'highlight-flash': 'highlight-flash 1s ease-out',
-  			'audio-wave': 'audio-wave 0.6s ease-in-out infinite'
+  			'audio-wave': 'audio-wave 0.6s ease-in-out infinite',
+  			'loading-progress': 'loading-progress 2s ease-in-out infinite',
+  			'record-highlight': 'record-highlight 2s ease-out forwards',
+  			'pulse-out': 'pulse-out 3s ease-in-out infinite'
   		}
   	}
   },

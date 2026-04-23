@@ -1,3 +1,6 @@
+import type { DataInfo } from '@/types/dataset-types';
+import type { Span } from '@/types/common-type';
+
 export function classNames(...classes: string[]) {
   return classes.filter(Boolean).join(' ')
 }
@@ -105,4 +108,70 @@ export const extractOutput = (rawOutput: unknown): string => {
       ? rawOutput
       : JSON.stringify(rawOutput);
   }
+}
+
+/**
+ * Extract DataInfo from a Span's attributes.
+ * Parses request/output JSON strings and extracts messages, tools, and tool_calls.
+ */
+export const extractDataInfoFromSpan = (span: Span): DataInfo => {
+  const spanAttributes = span.attribute as Record<string, unknown>;
+  const requestStr = spanAttributes.request as string;
+  const outputStr = spanAttributes.output as string;
+  const finishReason = spanAttributes.finish_reason as string;
+
+  const requestJson = tryParseJson(requestStr);
+  const outputJson = tryParseJson(outputStr);
+
+  const inputMessages = (requestJson?.messages as unknown[]) || [];
+  const outputMessage = outputJson?.choices?.[0]?.message;
+
+  const dataInfo: DataInfo = {
+    input: { messages: inputMessages },
+    output: { messages: outputMessage },
+  };
+
+  if (finishReason) {
+    dataInfo.output.finish_reason = finishReason;
+  }
+  if (requestJson?.tools) {
+    dataInfo.input.tools = requestJson.tools;
+  }
+  if (outputJson?.choices?.[0]?.tool_calls) {
+    dataInfo.output.tool_calls = outputJson.choices[0].tool_calls;
+  }
+  
+
+  return dataInfo;
+}
+
+/**
+ * Get a preview string from DataInfo for display in tables.
+ * Returns the first user message content or a fallback.
+ */
+export const getDataInfoPreview = (dataInfo: DataInfo): string => {
+  const messages = dataInfo.input.messages || [];
+
+  // Find the first user message
+  const userMessage = messages.find(
+    (m: { role?: string; content?: unknown }) => m.role === 'user'
+  );
+
+  if (userMessage?.content) {
+    const content = typeof userMessage.content === 'string'
+      ? userMessage.content
+      : JSON.stringify(userMessage.content);
+    return content.slice(0, 80) + (content.length > 80 ? '...' : '');
+  }
+
+  // Fallback to first message
+  const firstMessage = messages[0];
+  if (firstMessage?.content) {
+    const content = typeof firstMessage.content === 'string'
+      ? firstMessage.content
+      : JSON.stringify(firstMessage.content);
+    return content.slice(0, 80) + (content.length > 80 ? '...' : '');
+  }
+
+  return 'No messages';
 }
