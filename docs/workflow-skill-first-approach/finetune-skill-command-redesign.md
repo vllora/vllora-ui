@@ -253,7 +253,7 @@ One slash command per pipeline phase. Each is a thin narrator that shells out to
 | `/finetune-quickstart` | `vllora finetune quickstart` | `vft quickstart` | Guided first-run wizard; chains init→sources with defaults | 2 min | `WIZARD → LLM` |
 | `/finetune-init` | `vllora finetune init <obj>` | `vft init <obj>` | Scaffold `finetune-project/`, create gateway workflow | <10s | `DET` |
 | `/finetune-sources` | `vllora finetune sources <paths/URIs>` | `vft sources …` | Ingest PDFs / OTel traces from local paths or remote URIs | 1–30 min | `LLM` |
-| `/finetune-import-records` | `vllora finetune import-records <path/URI>` | `vft import-records …` | Alternative to sources+plan+generate: import pre-built records | 1–10 min | `DET` |
+| `/finetune-import-dataset` | `vllora finetune import-dataset <path/URI>` | `vft import-dataset …` | Alternative to sources+plan+generate: import pre-built records | 1–10 min | `DET` |
 | `/finetune-plan` | `vllora finetune plan` | `vft plan` | Build topic hierarchy + relations + grader draft; emit `plan.md` | 1–3 min | `LLM` |
 | `/finetune-generate` | `vllora finetune generate` | `vft generate` | Generate training records, finalize grader, validate, quality-gate | 3–10 min | `MIXED` |
 | `/finetune-eval` | `vllora finetune eval` | `vft eval` | Dry-run on 4B + 0.8B; readiness gate; re-run to iterate | 5–15 min/iter | `DET+COMPUTE` (on FAIL → `LLM`) |
@@ -344,7 +344,7 @@ Each Layer A pipeline verb composes one or more Layer B operations plus determin
 |---|---|
 | `init` | (no Layer B call) — creates workflow via `POST /workflows` directly |
 | `sources` | `knowledge add` (one job per batch of sources) |
-| `import-records` | `records import` |
+| `import-dataset` | `records import` |
 | `plan` | `records generate --only-tracking` (topics/relations sub-op) + `grader generate` (init mode) |
 | `generate` | `records generate` (records sub-op) + `grader generate` (finalize mode) + `grader dryrun` |
 | `eval` | `eval run`; on FAIL-with-grader-issue, also `grader generate` (refine mode) |
@@ -396,7 +396,7 @@ Machine / install ops — one surface (terminal only).
 | Requirement | Why | How to configure |
 |---|---|---|
 | **Claude** (required for every LLM-backed verb) | All LLM work — record generation, trace analysis, topic derivation, grader drafting, training monitoring — runs through `claude -p` worker subprocesses. | `claude login` (subscription — recommended, no extra cost) **OR** `export ANTHROPIC_API_KEY=sk-ant-...` (CI / scripted) |
-| **Remote source URIs** (optional — only if using `hf://` / `s3://` / `gs://` / `azblob://` URIs) | `sources` and `import-records` download from external storage | Provider env vars: `HF_TOKEN`, `AWS_ACCESS_KEY_ID`+`AWS_SECRET_ACCESS_KEY`, `GOOGLE_APPLICATION_CREDENTIALS`, `AZURE_STORAGE_CONNECTION_STRING`. See §4.6. |
+| **Remote source URIs** (optional — only if using `hf://` / `s3://` / `gs://` / `azblob://` URIs) | `sources` and `import-dataset` download from external storage | Provider env vars: `HF_TOKEN`, `AWS_ACCESS_KEY_ID`+`AWS_SECRET_ACCESS_KEY`, `GOOGLE_APPLICATION_CREDENTIALS`, `AZURE_STORAGE_CONNECTION_STRING`. See §4.6. |
 
 #### What you do NOT need to configure
 
@@ -483,7 +483,7 @@ Every command is classified by how it executes. This affects testing strategy, c
 | Kind | Commands |
 |---|---|
 | `PURE` | Layer A: `status`. Layer B: `jobs status`. Lifecycle: `version`, `doctor` (mostly). |
-| `DET` | Layer A: `init`, `import-records`. Layer B: `records import`, `grader import`, `grader dryrun`, `eval stop`, `train stop`. Lifecycle: all. Utilities: `cancel-*`, `log-step`, `update-analysis`, `validate`, `reconcile-topics`, `grader-sanity-check`, `diagnose-clipping`, `dry-run-grader`, `topics *`, `export`. |
+| `DET` | Layer A: `init`, `import-dataset`. Layer B: `records import`, `grader import`, `grader dryrun`, `eval stop`, `train stop`. Lifecycle: all. Utilities: `cancel-*`, `log-step`, `update-analysis`, `validate`, `reconcile-topics`, `grader-sanity-check`, `diagnose-clipping`, `dry-run-grader`, `topics *`, `export`. |
 | `DET+COMPUTE` | Layer A: `eval` (base path), parts of `train`. Layer B: `eval run`, `train run`. Utilities: `probe-difficulty`. |
 | `LLM` | Layer A: `sources`, `plan`. Layer B: `knowledge add`, `records generate`, `grader generate`. Long-running LLM worker within `train`: `training_monitor`. |
 | `MIXED` | Layer A: `generate` (LLM workers + deterministic scripts + gate), `train` (deterministic orchestration + `training_monitor` LLM worker), `eval` when grader refinement triggers. |
@@ -654,7 +654,7 @@ Same pipeline outcome; user drives each phase explicitly. Preferred when user wa
 ```
   USER   ▸  "I already have a training record set on HuggingFace."
   AGENT  ▸  [runs /finetune-init]
-            [runs /finetune-import-records hf://org/my-dataset]
+            [runs /finetune-import-dataset hf://org/my-dataset]
                         │
                         ▼
              (skips sources + plan + generate — records already exist)
@@ -873,7 +873,7 @@ Three entry commands, two pipeline paths.
                        ▼                                    ▼
               ┌────────────────┐                  ┌────────────────────┐
               │ /finetune-     │                  │ /finetune-         │
-              │   sources      │                  │   import-records   │
+              │   sources      │                  │   import-dataset   │
               │ (PDFs/traces)  │                  │ (skips plan+gen)   │
               └────────┬───────┘                  └─────────┬──────────┘
                        ▼                                    │
@@ -1131,10 +1131,10 @@ Artifacts: command maps to Layer B `records import`: records rows in SQLite; plu
 Workflow:
 
 ```
-   [USER]  /finetune-import-records hf://org/my-dataset
+   [USER]  /finetune-import-dataset hf://org/my-dataset
       │
       ▼
-   [PLUGIN]  shells out  ───▶  [CLI]  vllora finetune import-records ...
+   [PLUGIN]  shells out  ───▶  [CLI]  vllora finetune import-dataset ...
                                   │
                                   ├─  URI adapter resolves  →  local .jsonl / .parquet
                                   │
@@ -1161,8 +1161,8 @@ Workflow:
 Detailed steps:
 
 ```
- (1) [USER]     types:                 /finetune-import-records hf://org/my-dataset
- (2) [PLUGIN]   shells out            → [CLI] vllora finetune import-records hf://...
+ (1) [USER]     types:                 /finetune-import-dataset hf://org/my-dataset
+ (2) [PLUGIN]   shells out            → [CLI] vllora finetune import-dataset hf://...
  (3) [CLI]      URI adapter resolves   → local .jsonl / .parquet
  (4) [CLI]      auto-detects schema (openai-chat | custom)
  (5) [CLI]      runs validate_records.py (deterministic)
@@ -1576,7 +1576,7 @@ Detailed steps:
 | 0. install | [USER] (`vllora init`) | [CLI] | `~/.vllora/` | — |
 | 1. init | [USER] (`/finetune-init`) | [CLI] | config, journal | workflows |
 | 2. sources | [USER] (`/finetune-sources`) | [WORKERS] + [CLI] | knowledge/, trace-analysis/ | source_documents, otel_traces, knowledge_parts |
-| 2'. import | [USER] (`/finetune-import-records`) | [CLI] | training.jsonl | records |
+| 2'. import | [USER] (`/finetune-import-dataset`) | [CLI] | training.jsonl | records |
 | 3. plan | [USER] (`/finetune-plan`) | [WORKERS] + [CLI] | topics, relations, plan.md, grader-draft | topics, relations |
 | 4. generate | [USER] (`/finetune-generate`) | [WORKERS] + [CLI] | training.jsonl, grader.js | records, graders |
 | 5. eval | [USER] (`/finetune-eval`) | [GATEWAY] (inference) + [CLI] + [WORKERS] (refine) | test-runs/, grader.js (if refined) | evaluation_runs, evaluation_record_scores, graders |
@@ -1590,7 +1590,7 @@ Detailed steps:
 |---|---|---|---|---|
 | init | — | — | config.json, journal, analysis.json | `workflows` |
 | sources | local paths | URIs → cache | knowledge/, trace-analysis/ | `source_documents`, `otel_traces`, `knowledge_parts`, `workflows.trace_meta_json` |
-| import-records | — | URI → cache | training.jsonl | `records` |
+| import-dataset | — | URI → cache | training.jsonl | `records` |
 | plan | knowledge/, trace-analysis/ | — | topics.json, relations.json, grader-draft.js, plan.md | `topics`, `relations` |
 | generate | topics/, knowledge/, grader-draft.js | — | training.jsonl, grader.js, change-log.md | `records`, `graders` v1→v2 |
 | eval | training.jsonl, grader.js | gateway runs inference | test-runs/eval-{N}.json, grader.js (if refined), grader-diff.md | `evaluation_runs`, `evaluation_record_scores`, `graders` v3+ |
@@ -1605,7 +1605,7 @@ All phases also write `analysis.json` (local) → mirror to `workflows.analysis_
 ```
   init → sources → plan → generate → eval*(1..5) → train*(1..3) → done
                                   OR
-         → import-records → [plan=skipped, generate=done] → eval → train
+         → import-dataset → [plan=skipped, generate=done] → eval → train
 ```
 
 Re-running any command:
@@ -1865,7 +1865,7 @@ CREATE TABLE training_metrics (
 
 Every command writes `analysis_json` on `workflows` (single "user-facing summary" column), so that's omitted from the matrix below.
 
-| Table | init | sources | import-records | plan | generate | eval | train |
+| Table | init | sources | import-dataset | plan | generate | eval | train |
 |---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
 | `workflows` (row) | ✍ create | ✍ status, trace_meta | ✍ status | ✍ status | ✍ status | ✍ status, selected_model | ✍ status |
 | `source_documents` | | ✍ (+origin_uri) | | | | | |
@@ -1982,7 +1982,7 @@ Single source of truth for "where am I." `status` walks this file in order.
 
 ### 4.5 External source URIs
 
-Both `sources` and `import-records` accept local paths **or** URIs from external storage. URI resolution happens in `vllora/finetune/src/sources_adapters/` — one adapter per scheme.
+Both `sources` and `import-dataset` accept local paths **or** URIs from external storage. URI resolution happens in `vllora/finetune/src/sources_adapters/` — one adapter per scheme.
 
 #### Supported schemes
 
@@ -2011,7 +2011,7 @@ class SourceAdapter:
         """
 ```
 
-**Workers never know about URIs** — they always receive local paths. URI handling is strictly at the `sources` / `import-records` boundary.
+**Workers never know about URIs** — they always receive local paths. URI handling is strictly at the `sources` / `import-dataset` boundary.
 
 #### Provenance in DB
 
@@ -2020,7 +2020,7 @@ Every uploaded artifact records where it came from:
 ```sql
 ALTER TABLE source_documents ADD COLUMN origin_uri TEXT;
 ALTER TABLE otel_traces      ADD COLUMN origin_uri TEXT;
-ALTER TABLE records          ADD COLUMN origin_uri TEXT;         -- populated by import-records
+ALTER TABLE records          ADD COLUMN origin_uri TEXT;         -- populated by import-dataset
 ALTER TABLE records          ADD COLUMN origin_source_id TEXT;  -- HF dataset ID or similar
 ```
 
@@ -2529,7 +2529,7 @@ Each row: **inputs** → command → **files written** + **DB writes** + **user-
   Next: /finetune-plan"
 ```
 
-### 5.9 `import-records <path-or-uri> [--schema X]`
+### 5.9 `import-dataset <path-or-uri> [--schema X]`
 
 Alternative entry path to `sources → plan → generate`. Skips record generation for users who already have pre-built training records.
 
@@ -2578,7 +2578,7 @@ Alternative entry path to `sources → plan → generate`. Skips record generati
  "Imported N records from <uri>. Next: /finetune-eval"
 ```
 
-> Users with both raw materials AND pre-built records can run `sources → plan → generate` then `import-records --augment` to merge records. (Deferred to a later version — v0 treats the two paths as mutually exclusive.)
+> Users with both raw materials AND pre-built records can run `sources → plan → generate` then `import-dataset --augment` to merge records. (Deferred to a later version — v0 treats the two paths as mutually exclusive.)
 
 ### 5.10 Grader authoring lifecycle (cross-command)
 
@@ -2898,7 +2898,7 @@ Long-running. Only worker that polls external state continuously.
 │   ├── finetune-quickstart.md             (guided wizard — §7.3.2)
 │   ├── finetune-init.md                   (scaffold workflow)
 │   ├── finetune-sources.md                (ingest PDFs / traces / URIs)
-│   ├── finetune-import-records.md         (pre-built records entry)
+│   ├── finetune-import-dataset.md         (pre-built records entry)
 │   ├── finetune-plan.md                   (topics + grader draft)
 │   ├── finetune-generate.md               (records + finalize grader)
 │   ├── finetune-eval.md                   (readiness gate + iterate)
@@ -3226,7 +3226,7 @@ vllora/                                             # Rust workspace root
 │       │       └── finetune/                       # pipeline subcommand tree
 │       │           ├── mod.rs                      # FinetuneCommand enum + dispatcher
 │       │           ├── init.rs, sources.rs,
-│       │           │   import_records.rs,
+│       │           │   import_dataset.rs,
 │       │           │   plan.rs, generate.rs,
 │       │           │   eval.rs, train.rs,
 │       │           │   status.rs, quickstart.rs,
@@ -3290,7 +3290,7 @@ vllora/                                             # Rust workspace root
     ├── commands/                                   # 1 orchestrator + 9 thin verbs
     │   ├── finetune.md                             # orchestrator
     │   └── finetune-{quickstart,init,sources,
-    │       import-records,plan,generate,eval,
+    │       import-dataset,plan,generate,eval,
     │       train,status}.md                        # thin verbs
     ├── skills/                                     # reference skills
     │   ├── pipeline-context/SKILL.md

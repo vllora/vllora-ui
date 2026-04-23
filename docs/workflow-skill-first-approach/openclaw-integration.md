@@ -95,7 +95,7 @@ Users need both configured for the OpenClaw × vllora combo to work:
       ├── quickstart.ts               # wraps `vllora finetune quickstart`
       ├── init.ts                     #        `vllora finetune init`
       ├── sources.ts                  #        `vllora finetune sources`
-      ├── import-records.ts           #        `vllora finetune import-records`
+      ├── import-dataset.ts           #        `vllora finetune import-dataset`
       ├── plan.ts                     #        `vllora finetune plan`
       ├── generate.ts                 #        `vllora finetune generate`
       ├── eval.ts                     #        `vllora finetune eval`

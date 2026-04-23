@@ -105,7 +105,7 @@ vllora/                                            (Rust workspace root)
 │       │           ├── mod.rs                     [B] FinetuneCommand enum + dispatcher
 │       │           ├── init.rs                    [B] scaffold workflow, create DB row
 │       │           ├── sources.rs                 [B] URI resolve + spawn extractors
-│       │           ├── import_records.rs          [B] import pre-built records
+│       │           ├── import_dataset.rs          [B] import pre-built records
 │       │           ├── plan.rs                    [B] spawn relation_builder + grader_drafter(init)
 │       │           ├── generate.rs                [B] spawn record_generator + grader_drafter(finalize)
 │       │           ├── eval.rs                    [B] run gateway eval; spawn grader_drafter(refine) on fail
@@ -194,7 +194,7 @@ vllora/                                            (Rust workspace root)
 │   │   ├── finetune.md                            [C] ORCHESTRATOR (§2.3.1, §7.3.1)
 │   │   ├── finetune-init.md                       [C] thin
 │   │   ├── finetune-sources.md                    [C] thin
-│   │   ├── finetune-import-records.md             [C] thin
+│   │   ├── finetune-import-dataset.md             [C] thin
 │   │   ├── finetune-plan.md                       [C] thin
 │   │   ├── finetune-generate.md                   [C] thin
 │   │   ├── finetune-eval.md                       [C] thin
@@ -311,7 +311,7 @@ pub trait ExecutionLog {
 
 ### 4.1 Scope
 
-- **Pipeline verbs** (§5): init, sources, import-records, plan, generate, eval, train, status, quickstart, auto.
+- **Pipeline verbs** (§5): init, sources, import-dataset, plan, generate, eval, train, status, quickstart, auto.
 - **Workers** (§6.5): 6 worker modules + shared `claude_client.rs`.
 - **Prompts** (§6.3): per-worker system prompts in `finetune/src/prompts/*.md`.
 - **URI adapters** (§4.5): 6 scheme handlers.
@@ -352,7 +352,7 @@ Stable CLI surface — plugin commands shell out to these. Contract:
 - [ ] `finetune/src/sources_adapters/*.rs` — 6 adapters + tests
 - [ ] `gateway/src/cli/commands/finetune/init.rs` + integration test
 - [ ] `gateway/src/cli/commands/finetune/sources.rs` + integration test
-- [ ] `gateway/src/cli/commands/finetune/import_records.rs` + integration test
+- [ ] `gateway/src/cli/commands/finetune/import_dataset.rs` + integration test
 - [ ] `gateway/src/cli/commands/finetune/plan.rs` + integration test
 - [ ] `gateway/src/cli/commands/finetune/generate.rs` + integration test
 - [ ] `gateway/src/cli/commands/finetune/eval.rs` + integration test
@@ -515,7 +515,7 @@ Implement `gateway/src/cli/commands/finetune/jobs/*.rs` — thin wrappers over `
 - **`generate`** — needs record_generator + grader_drafter(finalize) + existing Python quality-gate script.
 - **`eval`** — needs existing Python eval script + grader_drafter(refine) on fail.
 - **`train`** — needs training_monitor + existing Python training-invocation script.
-- **`import-records`** — no workers.
+- **`import-dataset`** — no workers.
 - **`auto`** — wraps `status` + dispatches to next verb; ship last.
 
 #### B.5 Wire into CLI root  
@@ -624,7 +624,7 @@ Not blocking but worth agreeing early:
 If time is tight, ship this subset first:
 
 - Track A: state helpers + gateway routes (DB can be a simpler schema at first; add fields as needed).
-- Track B: `init`, `sources` (local paths only), `plan`, `generate`, `eval`, `train`, `status`. Skip `import-records`, `quickstart`, `auto`, URI adapters beyond local.
+- Track B: `init`, `sources` (local paths only), `plan`, `generate`, `eval`, `train`, `status`. Skip `import-dataset`, `quickstart`, `auto`, URI adapters beyond local.
 - Track C: `vllora init` + thin verb plugin commands only. Skip orchestrator (`/finetune`). Skip UI updates.
 
 This gives a working pipeline on the command line, with Claude Code thin-verb integration, and no fancy features. Orchestrator + URI adapters + UI polish come in iteration 2.
