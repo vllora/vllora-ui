@@ -1966,6 +1966,99 @@ No separate `vllora auth` commands. Reuse the standard env vars each provider de
   Docs: https://vllora.dev/auth#huggingface
 ```
 
+### 4.7 Precision requirements for state files
+
+In the monolithic SKILL.md architecture, Claude's conversation buffer was the memory; state files were optional status markers. In the new architecture, **the files ARE the memory.** Short-lived workers, the orchestrator, and cross-session users all depend on these files being exact. Sloppiness causes silent corruption, races, and lost reasoning.
+
+Two layers of precision:
+- **Semantic precision** — rich reasoning in artifacts (§9 invariant; §14.9). Covers *what* gets written.
+- **Operational precision** — atomic, ordered, validated, recoverable writes. Covers *how* writes happen. This subsection.
+
+#### 4.7.1 Per-file operational requirements
+
+| File | Requirement | Failure if violated |
+|---|---|---|
+| `pipeline-journal.json` | **Atomic writes** (write to `.tmp`, fsync, rename) — never partial | Re-run after crash reads half-written state; wrong step counts |
+| `pipeline-journal.json` | **Single-writer discipline** — only the CLI writes; never two CLI processes concurrently | Race condition; corrupt journal; orchestrator + thin verb both writing = chaos |
+| `pipeline-journal.json` | **Schema validation** on every write | Malformed journal silently breaks `/finetune-status` and re-run logic |
+| `pipeline-journal.json` | **Monotonic timestamps** — `updated_at` always ≥ prior value | UI sees out-of-order events; orchestrator confused about phase ordering |
+| `pipeline-journal.json` | **Explicit state transitions** — `pending → running → done`/`failed`; no jumps | Re-run can't decide whether to skip completed or resume in-flight |
+| `pipeline-journal.json` | **`iterations` array append-only** | Iteration history lost; can't audit which refine-mode attempts were tried |
+| `pipeline-journal.json` | **Crash-recovery status** — `running` written at phase start, `done`/`failed` at end. Re-run finding `running` with no live PID = known-crashed | Zombie state; re-run can't tell if phase is mid-flight or dead |
+| `analysis.json` | **Append-only per-phase section** — never overwrite prior phase entries | Prior reasoning lost; orchestrator + workers can't reference earlier decisions |
+| `analysis.json` | **Preserve rationale on update** — new reasoning augments old, never replaces | Workers re-derive decisions inconsistently across phases |
+| `analysis.json` | **Schema versioning** (`schema_version` field) | Old projects can't be migrated forward |
+| `analysis.json` | **Atomic writes + single writer** (same rules as journal) | Concurrent worker writes corrupt UI mirror |
+| `change-log.md` | **Append-only** — entries never edited or removed | Grader-evolution audit trail broken |
+| `change-log.md` | **Timestamp + author (worker name) + rationale + diff summary per entry** | "Who changed this and why?" becomes unanswerable |
+| `iterations.md` | **Append-only per iteration** | Eval/train loop history lost |
+| `execution-log.md` | **Append-only decision cards** — observation / analysis / decision / evidence | Cross-session debugging becomes guesswork |
+| All state files | **UTF-8, LF line endings, trailing newline** — no BOM, no CRLF | Cross-platform diff noise; git churn |
+
+#### 4.7.2 Single-writer discipline
+
+Only the CLI writes state files. **Not the plugin. Not the orchestrator. Not workers directly.**
+
+- Orchestrator calls `vllora finetune <verb>` via Bash; CLI writes journal.
+- Workers produce output (JSON on stdout or files in a staging dir); CLI reads it and writes the authoritative journal/analysis update.
+- Even `vllora finetune log-step` and `vllora finetune update-analysis` utilities funnel through the same state module.
+
+Rationale: with orchestrator + thin verbs + direct CLI all potentially active, we'd hit races without this rule. One writer is the only safe bar.
+
+#### 4.7.3 Atomic-write pattern
+
+All state-file writes go through `vllora.cli.state.atomic_write`:
+
+```python
+def atomic_write(path: Path, content: str | bytes):
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    with open(tmp, "wb") as f:
+        f.write(content if isinstance(content, bytes) else content.encode("utf-8"))
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)   # atomic on POSIX; rename on Windows (best-effort)
+```
+
+No raw `json.dump()` to state files. No direct `open(path, "w")`. Every write must either go through `atomic_write` or be append-only with OS-level append semantics (opening in `"a"` mode).
+
+#### 4.7.4 Crash-recovery semantics
+
+CLI writes phase state explicitly:
+
+```
+1. phase start:   journal.steps[<phase>].status = "running" + pid = os.getpid()
+2. phase success: journal.steps[<phase>].status = "done"
+3. phase failure: journal.steps[<phase>].status = "failed" + error = "..."
+```
+
+Re-running a command:
+- Journal says `done` → no-op, print "already done."
+- Journal says `running` + PID alive → refuse to start; print "already running (pid N). Stop it first or wait."
+- Journal says `running` + PID dead → **known crash**. Warn user, offer `--force` to restart from last sub-step.
+- Journal says `failed` → resume from last sub-step or `--force` to restart.
+- Journal says `iterating` → continue next iteration.
+- Journal says `pending` or missing → fresh start.
+
+#### 4.7.5 Contract tests (enforceable)
+
+Test harness verifies these properties:
+
+1. **Atomic-write property** — `kill -9` during a state write, re-open file, must be valid JSON + either pre-state or post-state. Never partial.
+2. **Single-writer property** — spawn two CLI processes racing the same phase. Exactly one succeeds; the other exits with a clear "already running" error.
+3. **Append-only property** — any update to `analysis.json` preserves all prior phase sections byte-for-byte.
+4. **Schema validity property** — every written journal satisfies `pipeline-journal.schema.json`.
+5. **Crash-recovery property** — crash mid-phase; re-run; pipeline resumes to correct terminal state.
+
+These tests run in CI for every pull request touching the state module.
+
+#### 4.7.6 Implementation discipline
+
+Three patterns codified:
+
+1. **All state-file writes go through `vllora.cli.state`.** Review rejects any PR with raw `json.dump` / `open(..., "w")` on state files.
+2. **Lint rule / grep guard** in CI: `open\(.*\.json.*,\s*["']w["']\)` on state-file paths → fails the build.
+3. **Documentation on every state-file module** points back to this subsection so future contributors know the rules.
+
 ---
 
 ## 5. Per-Command Specs
@@ -3078,6 +3171,10 @@ finetune-project/                    # see §4.1 for full tree
 - **Project files live in user's cwd.** Never in `~/.vllora/`. Matches git / Supabase / Vercel / Prisma convention.
 - **Artifacts are context carriers, not status flags.** `analysis.json`, `plan.md`, `change-log.md`, and `iterations.md` carry the *reasoning* between phases, not just outcomes. Because workers are short-lived `claude -p` subprocesses (no implicit memory across phases), these files are the handoff mechanism. Sparse or machine-only content breaks the pipeline's coherence. See §14 Architectural Tradeoffs for rationale.
 - **`analysis.json` is the running diary.** Every phase appends structured reasoning — observations, decisions, fix hints, root-cause analysis — not just numbers. It's the single document that, if read in order, explains why the pipeline made every choice it made. Workers and the UI both consume it.
+- **All state-file writes are atomic.** Write to `.tmp`, fsync, rename. Never partial writes. Applies to `pipeline-journal.json`, `analysis.json`, and any other JSON state file. See §4.7.3.
+- **Single-writer discipline for state files.** Only the CLI writes `pipeline-journal.json`, `analysis.json`, `change-log.md`, `iterations.md`, `execution-log.md`. Never plugin commands, orchestrator, or workers directly. Workers emit structured output; the CLI owns the write. Prevents races when orchestrator + thin verbs + direct CLI are concurrently active. See §4.7.2.
+- **Append-only history sections.** `analysis.json` phase sections, `iterations` arrays, `change-log.md`, `iterations.md`, `execution-log.md` are append-only — prior entries never mutated or removed. Enables audit, replay, and cross-session debugging. See §4.7.1.
+- **Explicit crash-recovery state.** Phases write `status: running` + PID at start, `done`/`failed` at end. Re-run finding `running` with dead PID = known-crashed state; prompts user to resume or `--force`. See §4.7.4.
 
 ---
 
