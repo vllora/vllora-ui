@@ -114,77 +114,126 @@ Two surfaces, one code path. **Same verb on both. Same result on both.**
   USER sees: progress narrated by plugin + final "Next: /finetune-generate"
 ```
 
-### 2.2 CLI contract commands (both surfaces)
+### 2.2 Two-layer command model
 
-The command surface follows the job-based CLI contract. Plugin commands remain thin narrators that shell out to these exact CLI commands.
+The CLI exposes **two layers** of commands:
 
-#### Generic status command
+- **Layer A — Pipeline verbs** (user-facing). Map 1:1 to plugin slash commands. Pipeline-position-aware (`init → sources → plan → …`). Each verb composes one or more Layer B operations plus local scripting + file I/O.
+- **Layer B — Job operations** (backend contract). Job-based primitives with idempotency, polling, cancellation. Mirror the workflow-scoped API. Usable directly for CI / API-first users.
 
-| Command | Purpose | Time needed | Required flags |
+Plugin commands shell out to Layer A. Layer A internally calls Layer B. Layer B commands are also first-class — power users, CI pipelines, and SDK clients invoke them directly.
+
+```
+  Claude Code chat          Terminal CLI (Layer A)        Terminal CLI (Layer B)
+  ─────────────────         ──────────────────────        ──────────────────────
+  /finetune-sources   ──▶   vllora finetune sources  ──▶  vllora finetune knowledge add
+                                                          vllora finetune dataset generate
+                                                           (Layer A composes one or more B ops)
+```
+
+### 2.3 Layer A — Pipeline verbs (user-facing)
+
+Same verb on plugin and terminal surfaces. Pipeline-position-aware; reads `pipeline-journal.json` to pick up where last run left off. `Kind` column per §2.11.
+
+| Plugin | CLI (Layer A) | CLI short alias | Purpose | Duration | Kind |
+|---|---|---|---|---|---|
+| `/finetune-quickstart` | `vllora finetune quickstart` | `vft quickstart` | Guided first-run wizard; chains init→sources with defaults | 2 min | `WIZARD → LLM` |
+| `/finetune-init` | `vllora finetune init <obj>` | `vft init <obj>` | Scaffold `finetune-project/`, create gateway workflow | <10s | `DET` |
+| `/finetune-sources` | `vllora finetune sources <paths/URIs>` | `vft sources …` | Ingest PDFs / OTel traces from local paths or remote URIs | 1–30 min | `LLM` |
+| `/finetune-import-dataset` | `vllora finetune import-dataset <path/URI>` | `vft import-dataset …` | Alternative to sources+plan+generate: import pre-built dataset | 1–10 min | `DET` |
+| `/finetune-plan` | `vllora finetune plan` | `vft plan` | Build topic hierarchy + relations + grader draft; emit `plan.md` | 1–3 min | `LLM` |
+| `/finetune-generate` | `vllora finetune generate` | `vft generate` | Generate training records, finalize grader, validate, quality-gate | 3–10 min | `MIXED` |
+| `/finetune-eval` | `vllora finetune eval` | `vft eval` | Dry-run on 4B + 0.8B; readiness gate; re-run to iterate | 5–15 min/iter | `DET+COMPUTE` (on FAIL → `LLM`) |
+| `/finetune-train` | `vllora finetune train` | `vft train` | GRPO training + monitor + analyze; re-run for next round | 30 min–3 hr | `DET+COMPUTE + LLM` (monitor) |
+| `/finetune-status` | `vllora finetune status` | `vft status` | Print pipeline-level current step + suggest next command | instant | `PURE` |
+
+### 2.4 Layer B — Job operations (backend contract)
+
+Job-based primitives. Each command creates, polls, or cancels a **job** identified by `job_id`. CLI ↔ API parity is enforced: every Layer B command maps to a workflow-scoped HTTP route. Useful directly for CI, SDK, and advanced workflows.
+
+#### Generic job status
+
+| Command | Purpose | Duration | Required flags | Kind |
+|---|---|---|---|---|
+| `vllora finetune jobs status` | Retrieve current state for an existing job (read-only) | instant | `--job-id <id>` | `PURE` |
+
+Output: `state`, timestamps, progress, terminal outcome (when available). Sourced from persisted DB records.
+
+#### Task operations
+
+| Command | Purpose | Duration | Kind |
 |---|---|---|---|
-| `vllora finetune jobs status` | Retrieve current status for an existing job ID (read-only) | instant | `--job-id <id>` |
+| `vllora finetune knowledge add` | Ingest knowledge sources into the workflow | 1–30 min | `LLM` |
+| `vllora finetune dataset import` | Import pre-built dataset into workflow records | 1–10 min | `DET` |
+| `vllora finetune dataset generate` | Generate training records from workflow knowledge + topics | 3–10 min | `LLM` |
+| `vllora finetune grader import` | Import an externally-authored grader.js | <1 min | `DET` |
+| `vllora finetune grader generate` | Generate or revise grader (init / finalize / refine mode) | 1–5 min | `LLM` |
+| `vllora finetune grader dryrun` | Dry-run grader on sample records for validation | 1–5 min | `DET` |
+| `vllora finetune eval run` | Run evaluation job for readiness + quality signals | 5–15 min | `DET+COMPUTE` |
+| `vllora finetune eval stop` | Cancel a running eval job | instant | `DET` |
+| `vllora finetune train run` | Submit GRPO training job | 30 min–3 hr | `DET+COMPUTE` |
+| `vllora finetune train stop` | Cancel a running training job | instant | `DET` |
 
-`jobs status` output includes current `state`, timestamps, progress, and terminal outcome (when available), sourced from persisted DB records.
+#### Shared flags (Layer B task commands)
 
-#### Direct task command catalog
+**Optional:**
+- `--idempotency-key <key>` — if omitted, server generates and returns one. Same key + equivalent payload returns the existing `job_id`.
+- `--only-tracking` — return after create ack; subsequent polls via `jobs status`.
+- `--input <json>` — structured input (provisional; currently accepted but not semantically processed).
 
-Each command below is first-class and maps to one operation family.
+**Required for `stop` commands:** `--job-id <id>`.
 
-| Command | Purpose | Time needed |
-|---|---|---|
-| `vllora finetune knowledge add` | Ingest knowledge sources into the workflow | 1-30 min |
-| `vllora finetune dataset import` | Import pre-built dataset into workflow records | 1-10 min |
-| `vllora finetune dataset generate` | Generate training dataset from workflow knowledge/topics | 3-10 min |
-| `vllora finetune grader import` | Import grader implementation into workflow | <1 min |
-| `vllora finetune grader generate` | Generate or revise grader implementation | 1-5 min |
-| `vllora finetune grader dryrun` | Dry-run grader on sample records for validation | 1-5 min |
-| `vllora finetune eval run` | Run evaluation job for readiness and quality signals | 5-15 min/iter |
-| `vllora finetune eval stop` | Request cancellation of running evaluation job | instant |
-| `vllora finetune train run` | Run training job | 30 min-3 hr |
-| `vllora finetune train stop` | Request cancellation of running training job | instant |
+#### Shared output contract
 
-### 2.3 Shared flags and outputs (task commands)
+- Immediate `job_id` and `operation` echo.
+- Response includes `idempotency_key` (provided or server-generated).
+- `run` commands (default, no `--only-tracking`): stream lifecycle updates until terminal state.
+- `run` commands (`--only-tracking`): acknowledge create and return; track later via `jobs status`.
+- `stop` commands: request backend cancellation and return resulting lifecycle state.
+- Job state is persisted (DB-backed). Status retrieval is polling-only in this iteration — no push/stream transport contract.
 
-Required flags:
-- None
+### 2.5 Error contract (both layers)
 
-Optional flags:
-- `--idempotency-key <key>` (if omitted, server generates and returns one)
-- `--only-tracking` (create job only, skip immediate progress tracking)
-- `--input <json>` (accepted but not semantically processed in this iteration)
+| Condition | Code |
+|---|---|
+| Invalid input | `INVALID_REQUEST` |
+| Unknown job / workflow | `NOT_FOUND` |
+| Auth failure | `UNAUTHORIZED` |
+| Authz failure | `FORBIDDEN` |
+| Stop request for terminal or non-cancellable job | `CONFLICT` (with idempotent cancellation details) |
 
-Additional required flags for stop commands:
-- `--job-id <id>`
+### 2.6 Layer A → Layer B composition
 
-Shared output contract:
-- Immediate `job_id` and `operation` echo
-- Response always includes `idempotency_key` (provided or generated)
-- Same key plus equivalent payload returns existing `job_id`
-- Run commands: by default (without `--only-tracking`), stream lifecycle updates until terminal state
-- Run commands with `--only-tracking`: return after create acknowledgment; later tracking uses `vllora finetune jobs status`
-- Stop commands: request backend cancellation and return resulting lifecycle state
-- Command-specific business outputs are placeholders in this iteration
-- Output must indicate that job state is persisted (database-backed)
+Each Layer A pipeline verb composes one or more Layer B operations plus deterministic scripting. Layer A is **not** just "alias for Layer B": it also owns `pipeline-journal.json` advancement, local file I/O, plan.md rendering, and user-facing summaries.
 
-### 2.4 Error contract
+| Layer A verb | Layer B operations it invokes (in order) |
+|---|---|
+| `init` | (no Layer B call) — creates workflow via `POST /workflows` directly |
+| `sources` | `knowledge add` (one job per batch of sources) |
+| `import-dataset` | `dataset import` |
+| `plan` | `dataset generate --only-tracking` (topics/relations sub-op) + `grader generate` (init mode) |
+| `generate` | `dataset generate` (records sub-op) + `grader generate` (finalize mode) + `grader dryrun` |
+| `eval` | `eval run`; on FAIL-with-grader-issue, also `grader generate` (refine mode) |
+| `train` | `train run` |
+| `status` | `jobs status` for the most recent job per domain, merged with journal state |
+| `quickstart` | `init` + `sources` (chained) |
 
-- Invalid input: `INVALID_REQUEST`
-- Unknown job: `NOT_FOUND`
-- Auth/authz failures: `UNAUTHORIZED` / `FORBIDDEN`
-- Stop request for terminal/non-cancellable job: `CONFLICT` with idempotent cancellation details
+Plugin slash commands map to Layer A verbs (name-for-name). Layer B remains terminal-only — not exposed in the plugin surface, since the plugin audience is step-by-step interactive users who benefit from pipeline-position awareness.
 
-### 2.5 Consistency requirements
+### 2.7 Consistency requirements
 
-- CLI lifecycle semantics match API lifecycle semantics
-- CLI run/stop/status flows map to workflow-scoped API routes:
-  - `/v1/finetune/workflows/{workflowId}/jobs`
-  - `/v1/finetune/workflows/{workflowId}/jobs/{jobId}/status`
-  - `/v1/finetune/workflows/{workflowId}/jobs/{jobId}/cancel`
-- Status retrieval is polling-only in this iteration (no push-stream transport contract)
-- Command-to-operation mapping is deterministic and covered by contract tests
-- CLI status output is sourced from persisted DB records (not transient in-memory state)
+- CLI lifecycle semantics match API lifecycle semantics.
+- Layer B `run` / `stop` / `jobs status` flows map to workflow-scoped API routes:
+  - `POST  /v1/finetune/workflows/{workflowId}/jobs`
+  - `GET   /v1/finetune/workflows/{workflowId}/jobs/{jobId}/status`
+  - `POST  /v1/finetune/workflows/{workflowId}/jobs/{jobId}/cancel`
+- Status retrieval is polling-only (no push-stream transport) in this iteration.
+- Layer A ↔ Layer B composition (§2.6 table) is deterministic and covered by contract tests.
+- CLI status output is sourced from persisted DB records — never transient in-memory state.
 
-### 2.6 Lifecycle commands (CLI only)
+### 2.8 Lifecycle commands (CLI only, not layered)
+
+Machine / install ops — one surface (terminal only).
 
 | Group | Verbs |
 |---|---|
@@ -192,11 +241,11 @@ Shared output contract:
 | Gateway | `vllora gateway start/stop/status/logs/reset` |
 | UI | `vllora ui start/stop/open` (optional pip extra) |
 
-### 2.7 CLI shortcut
+### 2.9 CLI shortcut
 
-`vft <verb>` is an alias for `vllora finetune <verb>`. Same Python code, different entrypoint in `pyproject.toml`. Canonical form in docs; short form for daily terminal use.
+`vft <verb>` is an alias for `vllora finetune <verb>`. Same Python code, different entrypoint in `pyproject.toml`. Canonical form in docs; short form for daily terminal use. Works for Layer A and Layer B equivalently (`vft knowledge add`, `vft plan`, …).
 
-### 2.8 Authentication
+### 2.10 Authentication
 
 One setup for all LLM-backed commands, inherited by every `claude -p` subprocess:
 
@@ -212,7 +261,228 @@ For external source URIs (hf://, s3://, gs://, ...), use provider-standard env v
 
 `vllora doctor` reports what's configured.
 
-> Note: Section 3 and later still use legacy phase labels (`sources`, `plan`, `generate`, `eval`, `train`) as workflow-stage names. For command invocation and API compatibility, treat Section 2 as authoritative: execution must use the job-based command catalog and `jobs status` / stop semantics defined above.
+> **Doc consistency:** §3–§12 describe Layer A verbs (`sources`, `plan`, `generate`, `eval`, `train`, …) as the user-facing surface. Where they say "CLI runs X," read it as "Layer A verb runs, which internally invokes Layer B operations per §2.6." Plugin slash commands always map to Layer A verbs.
+
+### 2.11 Execution kinds
+
+Every command is classified by how it executes. This affects testing strategy, cost expectations, reproducibility, and offline capability.
+
+| Kind | Definition | Deterministic? | LLM tokens? | Gateway compute? | Offline? |
+|---|---|---|---|---|---|
+| `PURE` | Read-only; no file/DB writes, no network writes. Safe to call any time. | yes | no | no | yes (reads local files only) |
+| `DET` | Deterministic: writes state, runs scripts, may call gateway HTTP. Same inputs → same outputs. No LLM. | yes | no | lightweight (CRUD only) | partial (needs gateway) |
+| `DET+COMPUTE` | Deterministic CLI orchestration, but submits heavy ML compute to the gateway (model inference for eval, GRPO training). CLI view is just POST + poll; wall-clock time + resource cost are high. | yes (from CLI) | no (CLI-side) | **heavy** (ML workload) | no |
+| `LLM` | Invokes `claude -p` worker(s). Non-deterministic (model sampling), consumes Claude tokens, requires `claude login` / `ANTHROPIC_API_KEY`. | no | **yes** | no | no |
+| `MIXED` | Combines DET scripts with LLM workers in a single verb. | partial | **yes** | maybe | no |
+| `WIZARD` | Interactive wizard that prompts the user; typically chains into `LLM` or `DET` verbs. | no (user-driven) | depends on chained verbs | — | — |
+
+**Implications:**
+
+- **Testing** — `DET` and `PURE` commands get full unit tests with expected outputs. `LLM` commands get integration tests against fixture-recorded `claude -p` transcripts. `DET+COMPUTE` uses mocked gateway responses.
+- **Caching** — `PURE` outputs can be memoized aggressively. `DET` outputs cached by input hash. `LLM` outputs never cached (runs may produce different valid answers).
+- **Cost/quotas** — Only `LLM` and `MIXED` consume Claude tokens. Only `DET+COMPUTE` consumes gateway GPU time. `status`, `stop`, all lifecycle ops are free.
+- **Reproducibility** — `DET` re-runs are identical. `LLM` re-runs may differ; `--seed` flags and prompt-temperature controls may be added later.
+- **Offline** — `PURE` works offline against local files. Everything else needs gateway (and `LLM` also needs Claude auth).
+- **Observability** — `LLM` and `MIXED` should emit per-worker token counts in stream-JSON; `/finetune-status` may surface cumulative tokens per workflow (open question, §10).
+
+**Quick reference — commands by kind:**
+
+| Kind | Commands |
+|---|---|
+| `PURE` | Layer A: `status`. Layer B: `jobs status`. Lifecycle: `version`, `doctor` (mostly). |
+| `DET` | Layer A: `init`, `import-dataset`. Layer B: `dataset import`, `grader import`, `grader dryrun`, `eval stop`, `train stop`. Lifecycle: all. Utilities: `cancel-*`, `log-step`, `update-analysis`, `validate`, `reconcile-topics`, `grader-sanity-check`, `diagnose-clipping`, `dry-run-grader`, `topics *`, `export`. |
+| `DET+COMPUTE` | Layer A: `eval` (base path), parts of `train`. Layer B: `eval run`, `train run`. Utilities: `probe-difficulty`. |
+| `LLM` | Layer A: `sources`, `plan`. Layer B: `knowledge add`, `dataset generate`, `grader generate`. Long-running LLM worker within `train`: `training_monitor`. |
+| `MIXED` | Layer A: `generate` (LLM workers + deterministic scripts + gate), `train` (deterministic orchestration + `training_monitor` LLM worker), `eval` when grader refinement triggers. |
+| `WIZARD` | Layer A: `quickstart`. |
+
+### 2.12 User journey — how someone uses the plugin
+
+Chat-centric view. The same verbs work from the terminal, but the plugin surface is what most users hit first.
+
+#### 2.12.1 Happy-path chat transcript (condensed)
+
+```
+ [ TERMINAL — one-time setup ]
+ 
+  $ pip install vllora
+  $ claude login                         # Claude Pro/Team subscriber
+  $ vllora init
+    ✓ Claude Code detected, plugin installed
+    ✓ Gateway started on :9090
+    ✓ Done. Open Claude Code and type /finetune-quickstart
+ 
+ 
+ [ CLAUDE CODE CHAT — the whole pipeline lives here ]
+ 
+  USER   ▸  /finetune-quickstart
+  AGENT  ▸  "6 steps: init → sources → plan → generate → eval → train.
+             What do you have?
+               [a] PDFs only
+               [b] OTel traces only
+               [c] Both
+               [d] Nothing — try the tau-retail demo"
+ 
+  USER   ▸  "a — PDFs. I want to fine-tune a customer support agent
+             for refund + order questions."
+  AGENT  ▸  [auto-runs /finetune-init] "Workflow wf-abc12 created."
+            [auto-runs /finetune-sources ./pdfs] "Extracted 12 PDFs.
+             Next: /finetune-plan"
+ 
+  USER   ▸  /finetune-plan
+  AGENT  ▸  [spawns workers; streams progress]
+            "Drafted 8 topics: order-cancel, refund-policy, exchange-
+             rules, … Wrote plan.md. Review it.
+             Next: /finetune-generate (or edit topics.json first)."
+ 
+  USER   ▸  [opens plan.md, reviews, happy]  /finetune-generate
+  AGENT  ▸  [spawns record_generator × 8 + grader_drafter(finalize)]
+            "Generated 240 records. Quality gate PASS.
+             Next: /finetune-eval"
+ 
+  USER   ▸  /finetune-eval
+  AGENT  ▸  [runs gateway eval on 4B + 0.8B]
+            "Readiness PASS (iter 1/5). Selected: qwen-4b.
+             Next: /finetune-train"
+ 
+  USER   ▸  /finetune-train
+  AGENT  ▸  [submits GRPO + monitors 2 hrs]
+            "Training complete. Adapter: adapter-xyz. Converged: yes."
+ 
+  USER   ▸  🎉
+```
+
+#### 2.12.2 Decision points & iteration loops
+
+```
+                  /finetune-quickstart
+                         │
+                         ▼
+                 pick inputs + objective
+                         │
+                         ▼
+               /finetune-init  (auto-chained)
+                         │
+                         ▼
+             /finetune-sources  (auto-chained)
+                         │
+                         ▼
+                /finetune-plan  ◀─────────┐
+                         │                │ user edits topics.json,
+                         ▼                │ re-runs /plan
+                  review plan.md          │
+                         │                │
+                ┌────────┴────────┐       │
+                ▼                  ▼      │
+           plan OK              edit     │
+                │                   │    │
+                │                   └────┘
+                ▼
+          /finetune-generate  ◀────────────┐
+                │                          │ fix topics, re-run
+                ▼                          │
+         quality gate?                     │
+                │                          │
+        ┌───────┴────────┐                 │
+        ▼                ▼                 │
+      PASS             FAIL ───────────────┘
+        │
+        ▼
+          /finetune-eval  ◀──────────────────────┐
+                │                                │ re-run
+                ▼                                │ (up to 5×)
+        readiness gate?                          │
+                │                                │
+   ┌────────┬───┴────┬──────────┬────────────┐  │
+   ▼        ▼        ▼          ▼            ▼  │
+  PASS   grader    data-fix   topic-fix   FAIL  │
+   │    auto-fix   needed     needed      × 5   │
+   │        │        │          │          │    │
+   │        └────────┼──────────┼──────────┼────┘
+   │                 │          │          │
+   │                 ▼          ▼          ▼
+   │            re-run       re-run     ABORT
+   │           /plan +      /plan only  (report
+   │           /generate                 blockers)
+   │
+   ▼
+          /finetune-train  ◀──────────────────┐
+                │                              │ re-run
+                ▼                              │ (up to 3 rounds
+         converged?                            │  — first run /eval
+                │                              │  to adjust grader
+        ┌───────┴────────┐                     │  / data)
+        ▼                ▼                     │
+    converged        not converged ────────────┘
+        │
+        ▼
+   🎉 adapter ready
+```
+
+#### 2.12.3 Alternative entry: pre-built dataset
+
+```
+  USER   ▸  "I already have a training dataset on HuggingFace."
+  AGENT  ▸  [runs /finetune-init]
+            [runs /finetune-import-dataset hf://org/my-dataset]
+                        │
+                        ▼
+             (skips sources + plan + generate — dataset already exists)
+                        │
+                        ▼
+            /finetune-eval  →  /finetune-train   (same as happy path)
+```
+
+#### 2.12.4 What happens across sessions
+
+All commands are idempotent and state-driven. The user isn't locked into one session:
+
+- **Tomorrow, in a new chat:**
+  `USER ▸ /finetune-status`
+  `AGENT ▸ "Workflow wf-abc12 — current step: eval (iter 2/5, last_fix=grader-refine). Next: /finetune-eval"`
+
+- **Training is long (2–3 hr):** user closes Claude Code, training continues on gateway. Comes back, runs `/finetune-status` → agent reports job state from DB.
+
+- **User deletes `finetune-project/`:** workflow record still in gateway DB. Can rebuild local files via `vllora finetune sync --from-db wf-abc12` (future utility).
+
+- **User loses the Claude Code session:** journal is local; re-opening any terminal and running `vllora finetune status` picks up exactly where they left off.
+
+#### 2.12.5 Terminal-only variant (no chat needed)
+
+Power users and CI skip the plugin entirely — same verbs, terminal surface:
+
+```bash
+# One-shot interactive:
+vllora finetune quickstart \
+  --objective "customer support agent" \
+  --sources ./pdfs \
+  --non-interactive
+
+# Manual chain (e.g., in a Makefile):
+vft init "..."
+vft sources ./pdfs
+vft plan
+vft generate
+vft eval
+vft train
+
+# Autonomous loop (CI):
+vft auto --scenario tau-retail --max-iterations 5
+```
+
+#### 2.12.6 Error & recovery paths
+
+| What went wrong | What the agent does | What the user does |
+|---|---|---|
+| Quality gate FAIL (generate) | Agent reports reason, suggests plan fix | Edit `topics.json` or objective; re-run `/finetune-plan` then `/finetune-generate` |
+| Readiness FAIL — grader issue (eval) | Agent auto-refines grader, writes diff | Re-run `/finetune-eval` to verify fix |
+| Readiness FAIL — data issue (eval) | Agent writes fix suggestion to `analysis.json` | Follow suggestion (rebalance topics); re-run `/finetune-plan` + `/finetune-generate` |
+| Readiness FAIL × 5 iterations | Agent aborts with blocker report | Manual intervention: edit grader, objective, or sources |
+| Training not converged | Agent reports root cause (collapse / clipping / plateau) | Re-run `/finetune-eval` to adjust, then `/finetune-train` |
+| Training round × 3 without convergence | Agent aborts | Reconsider scope: objective, base model, or source materials |
+| User closes chat mid-command | Command continues in background (for long LLM work) or pauses at next checkpoint | Re-open; `/finetune-status` shows state |
+| Gateway offline | Agent reports connection error | `vllora gateway start` (terminal); re-run command |
+| Claude auth expired | Agent reports 401 from `claude -p` | `claude login` (terminal); re-run command |
 
 ---
 
