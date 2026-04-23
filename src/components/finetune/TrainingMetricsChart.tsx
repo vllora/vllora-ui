@@ -36,6 +36,12 @@ interface TrainingMetricsChartProps {
   className?: string;
   /** Whether the training job is currently running (shows Live badge) */
   isLive?: boolean;
+  /**
+   * Optional pre-training eval mean. When provided, renders a dashed horizontal
+   * reference line labelled "baseline" — the single-glance answer to
+   * "did training beat the starting point?"
+   */
+  baselineScore?: number;
 }
 
 // Criteria line colors (distinct, dark-theme friendly) — matches Stitch tokens
@@ -135,6 +141,7 @@ export function TrainingMetricsChart({
   results,
   className,
   isLive,
+  baselineScore,
 }: TrainingMetricsChartProps) {
   // Process data for charts
   const { epochData, criteriaNames, latestCriteriaAvg } = useMemo(() => {
@@ -354,6 +361,23 @@ export function TrainingMetricsChart({
               strokeOpacity={0.15}
               strokeDasharray="4 4"
             />
+            {/* Pre-training baseline — the "did training beat the start?" reference */}
+            {typeof baselineScore === "number" && (
+              <ReferenceLine
+                y={baselineScore}
+                stroke="#64748b"
+                strokeOpacity={0.6}
+                strokeDasharray="6 4"
+                label={{
+                  value: `baseline ${baselineScore.toFixed(2)}`,
+                  position: "insideTopLeft",
+                  fill: "#94a3b8",
+                  fontSize: 10,
+                  fontWeight: 600,
+                  offset: 6,
+                }}
+              />
+            )}
 
             <CartesianGrid
               strokeDasharray="3 3"

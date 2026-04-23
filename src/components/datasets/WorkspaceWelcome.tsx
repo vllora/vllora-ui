@@ -33,6 +33,7 @@ import { TerminalHint } from "@/components/onboarding/TerminalHint";
 import { PipelineStrip } from "./DatasetOverviewPanel/PipelineStrip";
 import { HealthRow } from "./DatasetOverviewPanel/HealthRow";
 import { HierarchyInspector } from "./DatasetOverviewPanel/HierarchyInspector";
+import { TrainingImpactCard } from "./DatasetOverviewPanel/TrainingImpactCard";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -314,6 +315,14 @@ function PopulatedWorkflowWelcome({
             }}
           />
         </div>
+
+        {/* Training impact hero — renders above HealthRow only when at least
+            one training epoch has eval data. Reuses FinetuneJobsContext
+            cache (same data as the Training tab's TrainingMetricsSummary). */}
+        <TrainingImpactCard
+          baselineScore={datasetScore}
+          onOpenDetails={() => onOpenTab("finetune", "finetune", false)}
+        />
 
         {/* Dataset quality hero + ministat sidecars */}
         <HealthRow

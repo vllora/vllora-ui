@@ -196,13 +196,22 @@ export function GroundTruthCell({ text }: { readonly text: string | null }) {
   );
 }
 
-/** Two-line clamped input cell with hover tooltip and copy button. */
+/**
+ * Input cell with hover tooltip + copy button.
+ *
+ * `singleLine` (default `false`) picks between two densities:
+ *   - `false` — 2-line clamp (wraps, kept for UnifiedRecordTable's roomier view)
+ *   - `true`  — single-line ellipsis, matching the redesign mock's `.txt`
+ *     style used in the records table
+ */
 export function InputTextCell({
   text,
   emptyLabel = "—",
+  singleLine = false,
 }: {
   readonly text: string;
   readonly emptyLabel?: string;
+  readonly singleLine?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
   if (!text) {
@@ -215,11 +224,18 @@ export function InputTextCell({
     setTimeout(() => setCopied(false), 1500);
   };
   return (
-    <div className="group/in flex items-start gap-1.5 min-w-0">
+    <div className={cn("group/in flex gap-1.5 min-w-0", singleLine ? "items-center" : "items-start")}>
       <TooltipProvider delayDuration={200}>
         <Tooltip>
           <TooltipTrigger asChild>
-            <p className="text-foreground/80 line-clamp-2 leading-relaxed flex-1 min-w-0 cursor-help">
+            <p
+              className={cn(
+                "text-foreground/80 flex-1 min-w-0 cursor-help",
+                singleLine
+                  ? "truncate leading-none"
+                  : "line-clamp-2 leading-relaxed",
+              )}
+            >
               {text}
             </p>
           </TooltipTrigger>
@@ -231,7 +247,10 @@ export function InputTextCell({
       <button
         type="button"
         onClick={handleCopy}
-        className="shrink-0 mt-0.5 p-0.5 rounded text-muted-foreground/50 hover:text-foreground transition-opacity opacity-0 group-hover/in:opacity-100"
+        className={cn(
+          "shrink-0 p-0.5 rounded text-muted-foreground/50 hover:text-foreground transition-opacity opacity-0 group-hover/in:opacity-100",
+          singleLine ? "" : "mt-0.5",
+        )}
         title="Copy input"
       >
         {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}

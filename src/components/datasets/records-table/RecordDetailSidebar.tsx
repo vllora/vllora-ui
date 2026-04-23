@@ -28,7 +28,11 @@ import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
 import type { AvailableTopic } from "../record-utils";
 import type { JobColumn, RecordJobScore } from "./job-score-columns";
 import { estimateTokens, countTurns } from "./cells/StatsBadge";
-import { SourcePartsCell, useResolvedSourceParts } from "./shared-record-cells";
+import {
+  SourcePartsCell,
+  useResolvedSourceParts,
+  getRecordGroundTruth,
+} from "./shared-record-cells";
 import { QueryOriginBadge, getQueryOrigin } from "./cells/QueryOriginBadge";
 
 // ─── Types ───
@@ -173,6 +177,37 @@ export function RecordDetailSidebar({
               {composedMessages.length > 0 && (
                 <ConversationSection messages={composedMessages} />
               )}
+
+              {/* Ground Truth Section — the GRPO target. Shown as a distinct
+                  section rather than merged into Conversation because for
+                  most records the GT is a structured tool call / action
+                  (not an assistant message) and users need to compare it
+                  directly against the rollout. */}
+              {(() => {
+                const gt = getRecordGroundTruth(record);
+                if (!gt) return null;
+                return <GroundTruthSection text={gt} />;
+              })()}
+
+              {/* Model output — the rollout_content from the latest eval
+                  snapshot. Renders only when hydrated (ensureJobSnapshotLoaded
+                  was called by the overview or eval detail). Same data as
+                  `DryrunEvaluationResultRow` uses — no parallel fetch. */}
+              {(() => {
+                if (!jobColumns || !scores) return null;
+                const evalCols = jobColumns.filter((c) => c.type === "eval");
+                if (evalCols.length === 0) return null;
+                const latest = evalCols[evalCols.length - 1];
+                const rollout = scores.get(latest.id)?.rolloutContent;
+                if (!rollout) return null;
+                return (
+                  <ModelOutputSection
+                    text={rollout}
+                    jobLabel={latest.label}
+                    score={scores.get(latest.id)?.score}
+                  />
+                );
+              })()}
 
               {/* Query Origin (trace-informed curriculum) */}
               {typeof record.metadata?.prompt_type === "string" && (
@@ -893,6 +928,125 @@ function DetailCard({
         <span className="text-sm font-semibold text-foreground tabular-nums">{value}</span>
       </div>
       <span className="text-[10px] text-muted-foreground">{label}</span>
+    </div>
+  );
+}
+
+// ─── Ground Truth Section ───
+
+/**
+ * Renders the record's `ground_truth` field as a distinct panel.
+ *
+ * Why separate from Conversation: for GRPO records the GT is a structured
+ * target (often a tool-call formatted as `Action: name. arg: value`) rather
+ * than a natural assistant message, so it deserves visual separation and its
+ * own copy button. For pure conversational datasets where GT *is* the
+ * expected assistant turn, this still reads correctly — just labelled more
+ * explicitly than the conversation's assistant bubble.
+ */
+function GroundTruthSection({ text }: { readonly text: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = () => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+  return (
+    <div className="px-5 py-4 border-b border-border/50">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <SectionLabel title="Ground truth" />
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="inline-flex h-5 items-center gap-1 rounded border border-border/60 bg-card/40 px-1.5 text-[10px] text-muted-foreground/80 transition-colors hover:border-emerald-500/40 hover:text-emerald-300"
+          title={copied ? "Copied" : "Copy ground truth"}
+        >
+          {copied ? (
+            <>
+              <Check className="h-3 w-3" /> Copied
+            </>
+          ) : (
+            <>
+              <Copy className="h-3 w-3" /> Copy
+            </>
+          )}
+        </button>
+      </div>
+      <div className="rounded-md border border-emerald-500/20 bg-emerald-500/[0.04] px-3 py-2 font-mono text-[11.5px] leading-[1.55] text-emerald-300/90 whitespace-pre-wrap break-words">
+        {text}
+      </div>
+    </div>
+  );
+}
+
+// ─── Model Output Section ───
+
+/**
+ * Renders `rollout_content` from the latest eval — what the model actually
+ * produced for this record. Sits below Ground Truth so users can visually
+ * diff "expected vs got". Tone is amber when the paired score is < 0.6 to
+ * flag divergence at a glance.
+ */
+function ModelOutputSection({
+  text,
+  jobLabel,
+  score,
+}: {
+  readonly text: string;
+  readonly jobLabel: string;
+  readonly score?: number;
+}) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = () => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+  const tone =
+    typeof score === "number" && score < 0.6
+      ? { border: "border-rose-500/30", bg: "bg-rose-500/[0.04]", text: "text-rose-200/90" }
+      : typeof score === "number" && score < 0.8
+        ? { border: "border-amber-500/30", bg: "bg-amber-500/[0.04]", text: "text-amber-200/90" }
+        : { border: "border-border/60", bg: "bg-zinc-900/30", text: "text-foreground/90" };
+  return (
+    <div className="px-5 py-4 border-b border-border/50">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="flex items-baseline gap-2">
+          <SectionLabel title="Model output" />
+          <span className="font-mono text-[10px] text-muted-foreground/60">{jobLabel}</span>
+          {typeof score === "number" && (
+            <span className="font-mono text-[10px] text-muted-foreground/60 tabular-nums">
+              · score {score.toFixed(2)}
+            </span>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="inline-flex h-5 items-center gap-1 rounded border border-border/60 bg-card/40 px-1.5 text-[10px] text-muted-foreground/80 transition-colors hover:text-foreground"
+          title={copied ? "Copied" : "Copy model output"}
+        >
+          {copied ? (
+            <>
+              <Check className="h-3 w-3" /> Copied
+            </>
+          ) : (
+            <>
+              <Copy className="h-3 w-3" /> Copy
+            </>
+          )}
+        </button>
+      </div>
+      <div
+        className={cn(
+          "rounded-md border px-3 py-2 font-mono text-[11.5px] leading-[1.55] whitespace-pre-wrap break-words",
+          tone.border,
+          tone.bg,
+          tone.text,
+        )}
+      >
+        {text}
+      </div>
     </div>
   );
 }

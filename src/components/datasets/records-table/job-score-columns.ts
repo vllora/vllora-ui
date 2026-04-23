@@ -28,6 +28,12 @@ export interface RecordJobScore {
   readonly trend?: number;
   readonly status: JobColumnStatus;
   readonly reason?: string;
+  /**
+   * Model output for this record at this job (`rollout_content` from the
+   * cloud eval result). Present only for eval jobs whose pollingSnapshot
+   * has hydrated per-record data; undefined for jobs that only have a score.
+   */
+  readonly rolloutContent?: string;
 }
 
 // ─── Helpers ───

@@ -330,7 +330,6 @@ def extract_decision_points(
     dropped_orphan_tool = 0        # records dropped due to unrecoverable tool_call_id
     dropped_parse_failure = 0      # records dropped due to unparseable GT args
     dropped_errored_call = 0       # records dropped because the GT call returned an error
-    dropped_prior_error = 0        # records dropped because conversation history contains prior tool error
 
     # Index tool execution results per trace so we can skip decision points
     # whose ground-truth call errored in production (the agent later corrected
@@ -566,22 +565,26 @@ def extract_decision_points(
                 dropped_orphan_tool += 1
                 continue  # Drop the whole record — unusable for chat template
 
-            # Drop DPs whose conversation history contains a prior tool error.
-            # MT-GRPO (arXiv:2604.02869) shows naive inclusion of prior-error
-            # context without explicit recovery supervision can degrade
-            # training by up to 14pp. Until we implement Fission-GRPO-style
-            # error+recovery pairs, train only on clean-history decision
-            # points (matches ToolRL / Nemotron-Tool-N1 approach).
-            has_prior_error = False
-            for m in context[:-1]:  # exclude the very last turn's own tool result
-                if m.get("role") == "tool":
-                    c = str(m.get("content") or "").lower()
-                    if "error" in c and ("error:" in c or "error\"" in c or c.startswith("error")):
-                        has_prior_error = True
-                        break
-            if has_prior_error:
-                dropped_prior_error += 1
-                continue
+            # NOTE (2026-04-22): we DO NOT drop records with prior tool errors
+            # in their conversation history. The trace-success filter
+            # (tau_bench.reward >= 0.5) already ensures every kept record is
+            # from a trajectory that ultimately succeeded — a successful
+            # trajectory WITH a prior error is, by construction, a recovery
+            # demonstration. SWiRL (arXiv:2504.04736, TIER_1 Stanford) provides
+            # direct evidence that error-containing contexts improve RL
+            # training, not degrade it. AgentHER (arXiv:2603.21357, TIER_2)
+            # goes further — relabels failed trajectories for +7-11pp gain.
+            #
+            # Factual audit (airline): the prior-error filter we used to apply
+            # was dropping 20 records from successful tau-bench traces, all of
+            # which were legitimate recovery demos (agent hit "payment method
+            # not found" or "flight not available", then recovered with the
+            # correct next action). These are the highest-value training
+            # records we have — we keep them.
+            #
+            # The separate `_call_errored` check above already handles the
+            # genuine failure case (drop if the GT tool_call itself errored in
+            # the trace).
 
             # Extract per-span tool set
             span_tools = None
@@ -664,10 +667,6 @@ def extract_decision_points(
         print(f"  Decision points: dropped {dropped_errored_call} record(s) "
               f"whose GT call returned an error in the trace (training on "
               f"failed attempts teaches the model to reproduce them).")
-    if dropped_prior_error:
-        print(f"  Decision points: dropped {dropped_prior_error} record(s) "
-              f"with prior tool errors in conversation history (MT-GRPO "
-              f"arXiv:2604.02869: naive inclusion can degrade training).")
     if dropped_orphan_tool:
         print(f"  Decision points: dropped {dropped_orphan_tool} record(s) "
               f"with orphan tool messages (chat template would reject).")

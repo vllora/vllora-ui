@@ -9,13 +9,12 @@
  */
 
 import { useState, useMemo, useCallback } from "react";
-import { FileText, Sparkles, ExternalLink, Copy, Check } from "lucide-react";
+import { FileText, Sparkles, ExternalLink, Copy, Check, ChevronDown, ChevronRight } from "lucide-react";
 import type { PromptChainLink } from "./records-table/PromptChainCard";
 import { LayeredPromptChain } from "./records-table/LayeredPromptChain";
 import { cn } from "@/lib/utils";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
 import { resolveAndGroupBySource } from "@/lib/distri-finetune-tools/steps/shared/resolve-part-ref";
-import type { KnowledgeSource } from "@/types/knowledge-types";
 import type { DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { useJobScoreColumns } from "@/hooks/useJobScoreColumns";
@@ -25,12 +24,11 @@ import {
   FallbackScorePill,
   ScoreCell,
   JobColumnHeader,
-  SourcePartsCell,
-  useResolvedSourceParts,
   GroundTruthCell,
   getRecordGroundTruth,
   InputTextCell,
 } from "./records-table/shared-record-cells";
+import { ScoreStrip } from "./eval-dialog/ScoreStrip";
 
 type Tab = "records" | "linked-sources";
 
@@ -99,6 +97,16 @@ export function TopicDetailView({
   );
 
   const sourceCount = groupedSources.size;
+  const partsCount = uniqueRefs.length;
+
+  // Sort records by score ascending (weakest first) — matches research
+  // (Braintrust/Arize/LangSmith slice-view default) and the mockup's
+  // "Sample records · lowest scoring first" pattern. Records without a
+  // score fall through to the end.
+  const sortedRecords = useMemo(
+    () => [...records].sort(compareByScoreAsc),
+    [records],
+  );
 
   // Extract system prompt from the first record's data (the actual generated prompt)
   const recordSystemPrompt = useMemo(() => {
@@ -139,10 +147,19 @@ export function TopicDetailView({
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Topic hero — avg score + description only. Records/Sources live
-          in the top stat bar + tab labels; parts count is visible via the
-          Linked Sources tab drill-down; slug breadcrumb is above. */}
-      <TopicHero topicNode={topicNode} records={records} />
+      {/* Topic hero — mirrors the `hier-inspect` panel from the workflow
+          redesign mock: breadcrumb + description + 4-metric grid
+          (Records / Avg score / Sources / Parts) + "Sources linked" pills.
+          Research alignment: Braintrust/Arize/LangSmith all lead with a
+          slice-scoped stat header; the avg-chip-only header buried the
+          comparison signal users need. */}
+      <TopicHero
+        topicNode={topicNode}
+        records={records}
+        sourceCount={sourceCount}
+        partsCount={partsCount}
+        groupedSources={groupedSources}
+      />
       {/* Tabs + prompt toggle */}
       <div className="px-4 shrink-0 border-b border-border">
         <div className="flex items-center gap-0">
@@ -173,11 +190,10 @@ export function TopicDetailView({
         )}
         {activeTab === "records" ? (
           <RecordsTabContent
-            records={records}
+            records={sortedRecords}
             onSelectRecord={onSelectRecord}
             jobColumns={jobColumns}
             getScoresForRecord={getScoresForRecord}
-            sources={sources}
           />
         ) : (
           <LinkedSourcesTabContent groupedSources={groupedSources} />
@@ -235,7 +251,16 @@ export function TopicDetailView({
 
 // ─── Records Tab ───
 
-/** Extract user text from record data */
+/**
+ * Extract the **last** user message from the record's conversation.
+ *
+ * Trace-derived records are multi-turn: the first user turn is often a
+ * generic greeting ("Hi, I need help with…") that repeats across many
+ * records. The last user turn is the one the assistant's evaluated reply
+ * actually answers, so it's the discriminating signal for scanning a
+ * topic's records. `findLast` (vs `find`) picks it correctly in both the
+ * single-turn and multi-turn cases.
+ */
 function extractRecordUserText(data: unknown): string {
   if (!data || typeof data !== "object") return "";
   const d = data as Record<string, unknown>;
@@ -244,7 +269,9 @@ function extractRecordUserText(data: unknown): string {
     ? d.messages
     : ((d.input as Record<string, unknown> | undefined)?.messages ?? []);
   const inputMsgs = rawMsgs as Array<Record<string, unknown>>;
-  const userMsg = inputMsgs.find(m => m.role === "user");
+  // findLast keeps us correct for both single-turn (first === last) and
+  // multi-turn conversations.
+  const userMsg = [...inputMsgs].reverse().find((m) => m.role === "user");
   if (!userMsg) return "";
   return typeof userMsg.content === "string"
     ? userMsg.content
@@ -256,13 +283,11 @@ export function RecordsTabContent({
   onSelectRecord,
   jobColumns = [],
   getScoresForRecord,
-  sources = [],
 }: {
   readonly records: DatasetRecord[];
   readonly onSelectRecord?: (recordId: string) => void;
   readonly jobColumns?: readonly JobColumn[];
   readonly getScoresForRecord?: (recordId: string) => ReadonlyMap<string, RecordJobScore>;
-  readonly sources?: readonly KnowledgeSource[];
 }) {
   const hasJobColumns = jobColumns.length > 0;
   const hasGroundTruth = useMemo(
@@ -288,22 +313,21 @@ export function RecordsTabContent({
     <table className="w-full text-left border-collapse text-xs table-fixed">
       <thead>
         <tr className="border-b border-border/50 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50 bg-muted/30 sticky top-0 z-[2]">
-          <th className="px-4 py-2.5 w-8">#</th>
-          <th className="px-4 py-2.5 w-[35%]">Input</th>
-          {hasGroundTruth && <th className="px-4 py-2.5 w-[35%]">Ground Truth</th>}
+          <th className="px-4 py-2 w-10">#</th>
+          <th className="px-4 py-2 w-[40%]">Input · last user turn</th>
+          {hasGroundTruth && <th className="px-4 py-2 w-[40%]">Ground truth</th>}
           {hasJobColumns ? (
             jobColumns.map((col, i) => {
               const needsSep = i > 0 && col.type === "finetune" && jobColumns[i - 1].type === "eval";
               return (
-                <th key={col.id} className={cn("px-2 py-2.5 w-[100px] text-center", needsSep && "border-l-2 border-border pl-3")}>
+                <th key={col.id} className={cn("px-2 py-2 w-[100px] text-center", needsSep && "border-l-2 border-border pl-3")}>
                   <JobColumnHeader column={col} />
                 </th>
               );
             })
           ) : (
-            <th className="px-4 py-2.5 w-16 text-center">Score</th>
+            <th className="px-4 py-2 w-16 text-center">Score</th>
           )}
-          <th className="px-4 py-2.5 w-28">Source</th>
         </tr>
       </thead>
       <tbody>
@@ -315,7 +339,6 @@ export function RecordsTabContent({
             onClick={onSelectRecord}
             jobColumns={jobColumns}
             getScoresForRecord={getScoresForRecord}
-            sources={sources}
             showGroundTruth={hasGroundTruth}
           />
         ))}
@@ -330,7 +353,6 @@ function RecordTableRow({
   onClick,
   jobColumns = [],
   getScoresForRecord,
-  sources = [],
   showGroundTruth = false,
 }: {
   readonly record: DatasetRecord;
@@ -338,7 +360,6 @@ function RecordTableRow({
   readonly onClick?: (id: string) => void;
   readonly jobColumns?: readonly JobColumn[];
   readonly getScoresForRecord?: (recordId: string) => ReadonlyMap<string, RecordJobScore>;
-  readonly sources?: readonly KnowledgeSource[];
   readonly showGroundTruth?: boolean;
 }) {
   const userText = useMemo(() => extractRecordUserText(record.data), [record.data]);
@@ -351,22 +372,25 @@ function RecordTableRow({
     () => getScoresForRecord?.(record.id),
     [getScoresForRecord, record.id],
   );
-  const { partRefs, resolvedParts } = useResolvedSourceParts(record, sources);
   const fallbackScore = record.evaluation?.score ?? record.evaluation?.evalScore;
 
+  // Compact single-line rows — matches the redesign mock's `.tbl .row` density.
+  // Source info moves into the drawer ("Source context" section) instead of
+  // being a per-row column: for a single-topic slice the sources are repetitive
+  // and already summarised by the hero's "Sources linked" pills.
   return (
     <tr
       onClick={() => onClick?.(record.id)}
       className="border-b border-border/20 hover:bg-muted/30 transition-colors cursor-pointer"
     >
-      <td className="px-4 py-2.5 text-[11px] text-muted-foreground/50 tabular-nums align-top">
+      <td className="px-4 py-1.5 text-[11px] text-muted-foreground/50 tabular-nums align-middle">
         {index}
       </td>
-      <td className="px-4 py-2.5 align-top max-w-0">
-        <InputTextCell text={userText} emptyLabel="No user message" />
+      <td className="px-4 py-1.5 align-middle max-w-0">
+        <InputTextCell text={userText} emptyLabel="No user message" singleLine />
       </td>
       {showGroundTruth && (
-        <td className="px-4 py-2.5 align-top max-w-0">
+        <td className="px-4 py-1.5 align-middle max-w-0">
           <GroundTruthCell text={groundTruthText} />
         </td>
       )}
@@ -374,13 +398,13 @@ function RecordTableRow({
         jobColumns.map((col, i) => {
           const needsSep = i > 0 && col.type === "finetune" && jobColumns[i - 1].type === "eval";
           return (
-            <td key={col.id} className={cn("px-1 py-2.5 text-center align-top", needsSep && "border-l-2 border-border pl-3")}>
+            <td key={col.id} className={cn("px-1 py-1.5 text-center align-middle", needsSep && "border-l-2 border-border pl-3")}>
               <ScoreCell jobScore={scores?.get(col.id)} />
             </td>
           );
         })
       ) : (
-        <td className="px-4 py-2.5 text-center align-top">
+        <td className="px-4 py-1.5 text-center align-middle">
           {fallbackScore != null ? (
             <ScorePill score={fallbackScore} />
           ) : (
@@ -388,9 +412,6 @@ function RecordTableRow({
           )}
         </td>
       )}
-      <td className="px-4 py-2.5 align-top">
-        <SourcePartsCell resolvedParts={resolvedParts} unresolvedCount={partRefs.length} />
-      </td>
     </tr>
   );
 }
@@ -503,67 +524,173 @@ function scoreTone(avg: number | null): string {
   return "text-rose-300";
 }
 
+interface TopicHeroProps {
+  readonly topicNode: TopicHierarchyNode;
+  readonly records: readonly DatasetRecord[];
+  readonly sourceCount: number;
+  readonly partsCount: number;
+  readonly groupedSources: Map<
+    string,
+    { source: { id: string; name: string }; parts: Array<{ id: string; title?: string; type: string }> }
+  >;
+}
+
+/**
+ * Slice-scoped hero — minimal to avoid duplicating the tab breadcrumb + record
+ * count chip already rendered by RecordsSectionHeader above this component.
+ *
+ * Layout:
+ *   1. Description paragraph (if present)
+ *   2. Avg score chip + Sources summary (inline)
+ *   3. Source pills (truncated to 4 + overflow)
+ *   4. Sources linked — source pills with part counts
+ *
+ * Research alignment: every eval-first platform (Braintrust, Arize, LangSmith)
+ * leads a slice view with an aggregate stat header so users can judge "is
+ * this slice dragging the dataset down?" before scanning rows.
+ */
 function TopicHero({
   topicNode,
   records,
-}: {
-  readonly topicNode: TopicHierarchyNode;
-  readonly records: readonly DatasetRecord[];
-}) {
+  sourceCount,
+  partsCount,
+  groupedSources,
+}: TopicHeroProps) {
   const scores = records.map(pickRecordScore).filter((s): s is number => s != null);
-  const avgScore = scores.length > 0
-    ? scores.reduce((a, b) => a + b, 0) / scores.length
-    : null;
+  const avgScore = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : null;
 
-  // Records/Sources counts live in the top stat bar + tab labels; the slug
-  // path duplicates the tab breadcrumb; parts count is already visible via
-  // the Linked Sources tab drill-down. We surface only avg score (unique
-  // signal) + the topic description here.
-  const showAvgScore = avgScore != null;
+  // Drop the slug breadcrumb + "Records" tile: both duplicate the tab
+  // breadcrumb and the "N records" chip rendered by RecordsSectionHeader
+  // directly above this component. Keep only the signals unique to this
+  // slice — avg score (with tone), and the source / parts summary.
+  const pillSources = [...groupedSources.values()].slice(0, 4);
+  const hiddenSources = Math.max(0, groupedSources.size - pillSources.length);
 
-  if (!showAvgScore && !topicNode.description) {
+  const hasDescription = !!topicNode.description;
+  const hasAvgScore = avgScore != null;
+  const hasSources = sourceCount > 0;
+
+  if (!hasDescription && !hasAvgScore && !hasSources) {
     return null;
   }
 
   return (
-    <div className="border-b border-border shrink-0 bg-background px-4 py-2 space-y-1.5">
-      {showAvgScore && (
-        <div className="flex items-baseline flex-wrap gap-x-4 gap-y-1">
-          <HeroChip
-            label="Avg score"
-            value={avgScore.toFixed(2)}
-            valueClassName={scoreTone(avgScore)}
-          />
-        </div>
-      )}
-      {topicNode.description && (
+    <div className="border-b border-border shrink-0 bg-background px-4 py-3 space-y-2.5">
+      {hasDescription && (
         <p className="max-w-3xl text-[12.5px] leading-[1.55] text-foreground/85">
           {topicNode.description}
         </p>
+      )}
+
+      {(hasAvgScore || hasSources) && (
+        <div className="flex flex-wrap items-center gap-4 text-[11px]">
+          {hasAvgScore && (
+            <span className="inline-flex items-baseline gap-1.5">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.06em] text-muted-foreground/70">
+                Avg score
+              </span>
+              <span
+                className={cn(
+                  "font-mono text-[13px] font-semibold tabular-nums",
+                  scoreTone(avgScore),
+                )}
+              >
+                {avgScore.toFixed(2)}
+              </span>
+            </span>
+          )}
+          {hasSources && (
+            <span className="inline-flex items-baseline gap-1.5">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.06em] text-muted-foreground/70">
+                Sources
+              </span>
+              <span className="font-mono text-[13px] font-semibold text-foreground tabular-nums">
+                {sourceCount}
+              </span>
+              <span className="text-muted-foreground/60">
+                · {partsCount} {partsCount === 1 ? "part" : "parts"}
+              </span>
+            </span>
+          )}
+        </div>
+      )}
+
+      {hasSources && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {pillSources.map(({ source, parts }) => (
+            <span
+              key={source.id}
+              className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-card/40 px-2 py-0.5 text-[10.5px] text-foreground/80"
+              title={parts.map((p) => p.title ?? p.id).join(", ")}
+            >
+              <FileText className="h-2.5 w-2.5 text-muted-foreground/60" />
+              <span className="font-mono text-[10.5px]">{source.name}</span>
+              <span className="text-muted-foreground/50">
+                · {parts.length} {parts.length === 1 ? "part" : "parts"}
+              </span>
+            </span>
+          ))}
+          {hiddenSources > 0 && (
+            <span className="text-[10.5px] text-muted-foreground/60">
+              +{hiddenSources} more
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Score distribution — collapsible. Only surfaces when the topic has
+          ≥ 3 scored records, otherwise the histogram is noise. Reuses
+          ScoreStrip (same component rendered by HealthRow + DryRunActivityView)
+          so the shape/colors/bins stay consistent with the overview. */}
+      {scores.length >= 3 && (
+        <TopicDistributionStrip scores={scores} mean={avgScore ?? undefined} />
       )}
     </div>
   );
 }
 
-function HeroChip({
-  label,
-  value,
-  valueClassName,
+/** Collapsible score-distribution strip under the topic hero. */
+function TopicDistributionStrip({
+  scores,
+  mean,
 }: {
-  readonly label: string;
-  readonly value: string | number;
-  readonly valueClassName?: string;
+  readonly scores: readonly number[];
+  readonly mean?: number;
 }) {
+  const [open, setOpen] = useState(false);
+  const Chevron = open ? ChevronDown : ChevronRight;
   return (
-    <span className="inline-flex items-baseline gap-1.5">
-      <span className="text-[10px] font-semibold uppercase tracking-[0.06em] text-muted-foreground/70">
-        {label}
-      </span>
-      <span className={cn("text-[12px] font-semibold tabular-nums", valueClassName ?? "text-foreground")}>
-        {value}
-      </span>
-    </span>
+    <div className="space-y-1.5">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-muted-foreground/70 transition-colors hover:text-foreground"
+      >
+        <Chevron className="h-3 w-3" />
+        Distribution
+        <span className="text-muted-foreground/60">· {scores.length} scored records</span>
+      </button>
+      {open && (
+        <div className="rounded-md border border-border/60 bg-zinc-900/30 p-3">
+          <ScoreStrip scores={[...scores]} mean={mean} />
+        </div>
+      )}
+    </div>
   );
+}
+
+/**
+ * Sort comparator: records with lower scores first, unscored records last.
+ * Extracted so we can share it between the table render and the eventual
+ * "lowest scoring first" sample list.
+ */
+function compareByScoreAsc(a: DatasetRecord, b: DatasetRecord): number {
+  const sa = pickRecordScore(a);
+  const sb = pickRecordScore(b);
+  if (sa == null && sb == null) return 0;
+  if (sa == null) return 1;
+  if (sb == null) return -1;
+  return sa - sb;
 }
 
 // ─── Prompt Chain Panel ───
@@ -583,14 +710,25 @@ function PromptChainPanel({
 }: {
   readonly chain: readonly PromptChainLink[];
 }) {
+  // Collapsed by default — user's primary goal on this tab is scanning
+  // records. One click opens the panel; full prompt also lives in the
+  // record drawer per-record, so this header is a quick reference, not
+  // required reading.
+  const [open, setOpen] = useState(false);
   const [view, setView] = useState<PromptView>("full");
   if (chain.length === 0) return null;
   const leaf = chain[chain.length - 1];
   const fullPrompt = chain.map((l) => l.prompt).join("\n\n");
+  const Chevron = open ? ChevronDown : ChevronRight;
 
   return (
     <div className="border-b border-border bg-background/95 backdrop-blur-sm shrink-0">
-      <div className="flex items-center gap-2 px-4 pt-2.5">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-2 px-4 py-2 text-left transition-colors hover:bg-muted/20"
+      >
+        <Chevron className="h-3 w-3 shrink-0 text-muted-foreground/60" />
         <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
           System prompt
         </span>
@@ -598,26 +736,32 @@ function PromptChainPanel({
           · {chain.length} layer{chain.length === 1 ? "" : "s"} · active:{" "}
           <span className="text-emerald-300">{leaf.label}</span>
         </span>
-        <div className="ml-auto inline-flex rounded border border-border/60 bg-muted/30 p-0.5">
-          <PromptViewButton
-            active={view === "full"}
-            onClick={() => setView("full")}
-            label="Full prompt"
-          />
-          <PromptViewButton
-            active={view === "chain"}
-            onClick={() => setView("chain")}
-            label="Prompt chain"
-          />
-        </div>
-      </div>
-      <div className="px-4 pb-3 pt-2">
-        {view === "full" ? (
-          <FullPromptView text={fullPrompt} />
-        ) : (
-          <LayeredPromptChain chain={chain} hideHeader />
-        )}
-      </div>
+      </button>
+      {open && (
+        <>
+          <div className="flex items-center gap-2 px-4 pb-1">
+            <div className="ml-auto inline-flex rounded border border-border/60 bg-muted/30 p-0.5">
+              <PromptViewButton
+                active={view === "full"}
+                onClick={() => setView("full")}
+                label="Full prompt"
+              />
+              <PromptViewButton
+                active={view === "chain"}
+                onClick={() => setView("chain")}
+                label="Prompt chain"
+              />
+            </div>
+          </div>
+          <div className="px-4 pb-3 pt-2">
+            {view === "full" ? (
+              <FullPromptView text={fullPrompt} />
+            ) : (
+              <LayeredPromptChain chain={chain} hideHeader />
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }

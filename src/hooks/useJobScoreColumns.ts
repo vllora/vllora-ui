@@ -42,9 +42,15 @@ export function useJobScoreColumns(
     [evalJobs, finetuneJobs],
   );
 
-  // Build per-record score + reason lookups for eval jobs (from polling snapshots)
+  // Build per-record score + reason + rollout lookups for eval jobs (from
+  // polling snapshots). rollout_content is the model's actual output for a
+  // given record at this eval — the signal the drawer's "Model output"
+  // section renders so users can compare against ground truth inline.
   const evalScoresByRecord = useMemo(() => {
-    const map = new Map<string, Map<string, { score: number; reason?: string }>>();
+    const map = new Map<
+      string,
+      Map<string, { score: number; reason?: string; rolloutContent?: string }>
+    >();
 
     for (const job of evalJobs) {
       const results = job.pollingSnapshot?.results ?? [];
@@ -63,8 +69,14 @@ export function useJobScoreColumns(
         const entry = Array.isArray(epochEntries) ? epochEntries[0] : undefined;
         if (!entry || entry.score == null) continue;
 
-        const recordScores = map.get(rowId) ?? new Map<string, { score: number; reason?: string }>();
-        recordScores.set(job.id, { score: entry.score, reason: entry.reason ?? undefined });
+        const recordScores =
+          map.get(rowId) ??
+          new Map<string, { score: number; reason?: string; rolloutContent?: string }>();
+        recordScores.set(job.id, {
+          score: entry.score,
+          reason: entry.reason ?? undefined,
+          rolloutContent: entry.rollout_content ?? undefined,
+        });
         map.set(rowId, recordScores);
       }
     }
@@ -126,6 +138,11 @@ export function useJobScoreColumns(
         const entry = getEntry(recordId, col.id, col.type);
         const score = entry?.score;
         const reason = entry?.reason;
+        // `rolloutContent` only flows from eval snapshots today (finetune's
+        // evalState doesn't include it yet). Casting keeps the plumbing
+        // forward-compatible without re-typing the shared lookup map.
+        const rolloutContent =
+          (entry as { rolloutContent?: string } | undefined)?.rolloutContent;
 
         // Compute trend: delta from previous column of same type
         let trend: number | undefined;
@@ -145,6 +162,7 @@ export function useJobScoreColumns(
           score,
           trend,
           reason,
+          rolloutContent,
           status: col.status,
         });
       }

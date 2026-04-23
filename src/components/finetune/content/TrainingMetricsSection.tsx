@@ -18,6 +18,8 @@ interface TrainingMetricsSectionProps {
   onRefresh: () => void;
   /** Whether the training job is currently running (shows Live badge on chart) */
   isLive?: boolean;
+  /** Pre-training eval mean — drawn as a dashed baseline on the chart. */
+  baselineScore?: number;
 }
 
 export function TrainingMetricsSection({
@@ -27,6 +29,7 @@ export function TrainingMetricsSection({
   error,
   onRefresh,
   isLive,
+  baselineScore,
 }: TrainingMetricsSectionProps) {
   // Show chart if data exists (even during refresh/reload — avoids UI flicker)
   if (evalResults && evalResults.results.length > 0) {
@@ -34,6 +37,7 @@ export function TrainingMetricsSection({
       <TrainingMetricsChart
         results={evalResults.results}
         isLive={isLive}
+        baselineScore={baselineScore}
       />
     );
   }

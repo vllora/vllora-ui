@@ -14,7 +14,6 @@ import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
-import type { KnowledgeSource } from "@/types/knowledge-types";
 import { extractMessages, cleanText } from "./cells/ConversationThreadCell.utilities";
 import { emitter } from "@/utils/eventEmitter";
 import type { JobColumn, RecordJobScore } from "./job-score-columns";
@@ -22,8 +21,6 @@ import {
   FallbackScorePill,
   ScoreCell,
   JobColumnHeader,
-  SourcePartsCell,
-  useResolvedSourceParts,
   GroundTruthCell,
   getRecordGroundTruth,
   InputTextCell,
@@ -45,7 +42,6 @@ export interface UnifiedRecordTableProps {
   readonly onExpand?: (record: DatasetRecord) => void;
   readonly jobColumns?: readonly JobColumn[];
   readonly getScoresForRecord?: (recordId: string) => ReadonlyMap<string, RecordJobScore>;
-  readonly sources?: readonly KnowledgeSource[];
 }
 
 // ─── Helpers ───
@@ -55,10 +51,14 @@ function getRecordScore(record: DatasetRecord): number | undefined {
 }
 
 function extractRecordText(record: DatasetRecord): { userText: string } {
+  // Match TopicDetailView: pick the LAST user turn. First turn is often a
+  // generic greeting that repeats across many records — last turn is what
+  // the assistant's response actually answers, i.e. the discriminating
+  // signal for scanning records.
   const msgs = extractMessages(record.data).filter(
     (m) => m.role.toLowerCase() !== "system",
   );
-  const userMsg = msgs.find((m) => {
+  const userMsg = [...msgs].reverse().find((m) => {
     const r = m.role.toLowerCase();
     return r === "user" || r === "human";
   });
@@ -79,7 +79,6 @@ export function UnifiedRecordTable({
   onExpand,
   jobColumns = [],
   getScoresForRecord,
-  sources = [],
 }: UnifiedRecordTableProps) {
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
   const [highlightedRecordId, setHighlightedRecordId] = useState<string | null>(null);
@@ -320,8 +319,8 @@ export function UnifiedRecordTable({
       <thead>
         <tr className="border-b border-border/50 text-[10px] text-muted-foreground/60 tracking-wider">
           <th className="text-left px-3 py-2 w-8">#</th>
-          <th className="text-left px-3 py-2">Input</th>
-          {hasGroundTruth && <th className="text-left px-3 py-2 w-[110px]">Ground Truth</th>}
+          <th className="text-left px-3 py-2">Input · last user turn</th>
+          {hasGroundTruth && <th className="text-left px-3 py-2 w-[40%]">Ground truth</th>}
           {hasJobColumns ? (
             jobColumns.map((col, i) => {
               const needsSep = hasSeparator && i > 0 && col.type === "finetune" && jobColumns[i - 1].type === "eval";
@@ -334,7 +333,6 @@ export function UnifiedRecordTable({
           ) : (
             <th className="text-left px-3 py-2 w-20">Score</th>
           )}
-          <th className="text-left px-3 py-2 w-28">Source</th>
         </tr>
       </thead>
       <tbody>
@@ -379,7 +377,6 @@ export function UnifiedRecordTable({
               onExpand={onExpand}
               jobColumns={jobColumns}
               getScoresForRecord={getScoresForRecord}
-              sources={sources}
               showGroundTruth={hasGroundTruth}
             />
           );
@@ -510,7 +507,6 @@ function RecordTableRow({
   onExpand,
   jobColumns = [],
   getScoresForRecord,
-  sources = [],
   showGroundTruth = false,
 }: {
   readonly record: DatasetRecord;
@@ -520,7 +516,6 @@ function RecordTableRow({
   readonly onExpand?: (record: DatasetRecord) => void;
   readonly jobColumns?: readonly JobColumn[];
   readonly getScoresForRecord?: (recordId: string) => ReadonlyMap<string, RecordJobScore>;
-  readonly sources?: readonly KnowledgeSource[];
   readonly showGroundTruth?: boolean;
 }) {
   const groundTruthText = useMemo(
@@ -536,8 +531,6 @@ function RecordTableRow({
     [getScoresForRecord, record.id],
   );
 
-  const { partRefs, resolvedParts } = useResolvedSourceParts(record, sources);
-
   return (
     <tr
       className={cn(
@@ -546,14 +539,14 @@ function RecordTableRow({
       )}
       onClick={() => onExpand?.(record)}
     >
-      <td className="px-3 py-2 text-muted-foreground/40 tabular-nums" style={{ paddingLeft }}>
+      <td className="px-3 py-1.5 text-muted-foreground/40 tabular-nums align-middle" style={{ paddingLeft }}>
         {index + 1}
       </td>
-      <td className="px-3 py-2">
-        <InputTextCell text={userText} />
+      <td className="px-3 py-1.5 align-middle max-w-0">
+        <InputTextCell text={userText} singleLine />
       </td>
       {showGroundTruth && (
-        <td className="px-3 py-2">
+        <td className="px-3 py-1.5 align-middle max-w-0">
           <GroundTruthCell text={groundTruthText} />
         </td>
       )}
@@ -562,19 +555,16 @@ function RecordTableRow({
           const jobScore = scores?.get(col.id);
           const needsSep = i > 0 && col.type === "finetune" && jobColumns[i - 1].type === "eval";
           return (
-            <td key={col.id} className={cn("px-1 py-2 text-center", needsSep && "border-l-2 border-border pl-3")}>
+            <td key={col.id} className={cn("px-1 py-1.5 text-center align-middle", needsSep && "border-l-2 border-border pl-3")}>
               <ScoreCell jobScore={jobScore} />
             </td>
           );
         })
       ) : (
-        <td className="px-3 py-2">
+        <td className="px-3 py-1.5 align-middle">
           <FallbackScorePill score={getRecordScore(record)} />
         </td>
       )}
-      <td className="px-3 py-2">
-        <SourcePartsCell resolvedParts={resolvedParts} unresolvedCount={partRefs.length} />
-      </td>
     </tr>
   );
 }

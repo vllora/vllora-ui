@@ -4766,9 +4766,10 @@ def _estimate_recommended_max_tokens(records: list[dict]) -> int:
     ground_truth (e.g. {"name": ..., "arguments": ...}) indicate tool-calling
     scenarios. Those records need budget for multi-arg tool_call XML + long
     free-text parameters (think.thought, transfer_to_human_agents.summary).
-    Empirical finding (2026-04-21): 512 halts the model mid-tool-call. Floor
-    of 2048 prevents that class of truncation while staying well under
-    MT-GRPO paper's 45K budget.
+    Empirical finding on our own runs (2026-04-21): 512 halts the model
+    mid-tool-call on tau-bench trajectories. Floor of 2048 prevents that
+    class of truncation while staying well under the token budgets reported
+    by similar tool-calling GRPO work.
     """
     import statistics as _stats
 
