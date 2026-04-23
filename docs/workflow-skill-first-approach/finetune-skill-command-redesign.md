@@ -18,11 +18,16 @@ Spec for the `vllora-finetune` Claude Code plugin and its backing CLI. This docu
  ┌──────────────────────────────────────────────────────────────────────┐
  │                          USER                                        │
  │                                                                      │
- │   Types commands in one of two surfaces (same verbs, same result):   │
- │     (A) Claude Code chat       →   /finetune-<verb>                  │
- │     (B) Terminal / CI / script →   vllora finetune <verb>            │
+ │   Picks one of three surfaces (all call the same CLI underneath):    │
+ │     (A) Claude Code — orchestrator mode    →  /finetune              │
+ │         (thick agent; holds context, engages dialogue, drives the    │
+ │          whole pipeline in one session — §2.3.1)                     │
+ │     (B) Claude Code — direct verb mode     →  /finetune-<verb>       │
+ │         (thin narrator per phase — §2.3.2)                           │
+ │     (C) Terminal / CI / script             →  vllora finetune <verb> │
+ │         (headless, same verbs — §2.3.2)                              │
  └─────────────────────────┬────────────────────────────────────────────┘
-                           │ both surfaces trigger the same code
+                           │ all three surfaces trigger the same CLI
                            ▼
  ┌──────────────────────────────────────────────────────────────────────┐
  │                      vllora PYTHON CLI                               │
@@ -72,27 +77,35 @@ Spec for the `vllora-finetune` Claude Code plugin and its backing CLI. This docu
 
 ### 1.2 Cardinal rules
 
-1. **CLI is the only API.** Both surfaces (plugin in Claude Code, terminal CLI) run the same Python code.
-2. **Plugin commands are thin narrators** — they shell out to `vllora finetune <verb>`, stream stdout, add zero logic.
+1. **CLI is the only API.** All pipeline logic lives in the Python CLI. Every user-facing surface (orchestrator, thin verbs, direct terminal, CI) calls into the same CLI code path.
+2. **Plugin has two modes over the same CLI** (§2.3):
+   - **Orchestrator** (`/finetune`) — thick, stateful; holds context across phases, dialogues with user.
+   - **Thin verb commands** (`/finetune-<verb>`) — one per phase; narrator only, no state.
+   Orchestrator uses thin verbs (or the CLI) as its tools. Both surfaces ship in the plugin; users pick.
 3. **Workers shell out to `claude -p`** for LLM work. Auth is inherited from `claude login` (Claude subscription) or `ANTHROPIC_API_KEY` (CI). **No separate API key required for Claude subscribers.**
 4. **Gateway never tracks local file paths.** `vllora.db` has zero references to cwd. A user can delete `finetune-project/` — workflow records survive in DB.
 5. **Single authoritative source per artifact.** Local files and DB never both claim ownership — one is authoritative, the other is mirror/cache (see §4.1).
 6. **Idempotent commands.** Re-running any command reads `pipeline-journal.json` and skips completed sub-steps.
+7. **Artifacts are context carriers.** `analysis.json`, `plan.md`, `change-log.md`, `iterations.md` carry reasoning between phases, not just status. Short-lived workers and fresh orchestrator sessions both depend on them (§14.9).
 
 ---
 
 ## 2. Surfaces — Plugin ↔ CLI Mapping
 
-Two surfaces, one code path. **Same verb on both. Same result on both.**
+Three surfaces, one code path. The CLI is the real API; surfaces differ only in how the user drives it.
 
 ### 2.1 How a command actually executes
+
+Two flows, same CLI underneath. Pick the flow that matches the surface the user chose.
+
+#### Flow A — Thin verb command (direct control)
 
 ```
   USER types /finetune-plan in Claude Code
        │
        ▼
   PLUGIN reads ~/.claude/plugins/vllora-finetune/commands/finetune-plan.md
-    (thin narrator — contains "shell out to `vllora finetune plan`,
+    (thin narrator — "shell out to `vllora finetune plan`,
      pipe stdout back, present plan.md to user")
        │
        ▼
@@ -114,6 +127,60 @@ Two surfaces, one code path. **Same verb on both. Same result on both.**
   USER sees: progress narrated by plugin + final "Next: /finetune-generate"
 ```
 
+One command, one pipeline step. User drives each phase by typing the next verb.
+
+#### Flow B — Orchestrator command (guided / dialogue-driven)
+
+```
+  USER types /finetune in Claude Code
+       │
+       ▼
+  PLUGIN reads commands/finetune.md  (thick orchestrator playbook)
+    Claude Code enters an agent loop, continuously:
+       │
+       ▼
+  ORCHESTRATOR (Claude, in-session):
+    - reads pipeline-journal.json + analysis.json
+    - decides next action (run phase / ask user / diagnose)
+    - uses tools:
+        Bash      → `vllora finetune <verb>`  (calls CLI for pipeline work)
+        Read/Write→  inspects + edits artifacts
+        Task      →  focused subagent if parallel work helps
+    - receives CLI output, incorporates into running narrative
+    - dialogues with user when input is needed
+       │
+       ▼   (CLI invocation — same as Flow A's CLI path)
+  CLI does real work (spawns workers, uploads, writes journal)
+       │
+       ▼
+  ORCHESTRATOR reads resulting artifacts, plans next phase,
+  or pauses to ask user. Loops until pipeline complete.
+       │
+       ▼
+  USER experiences: ongoing conversation, same Claude Code session,
+  from "let's fine-tune a model" all the way to "adapter ready"
+```
+
+Many CLI invocations, one user conversation. The orchestrator holds context across phases and engages the user naturally.
+
+#### Flow C — CLI direct (terminal / CI)
+
+```
+  USER types `vllora finetune plan` in terminal (or in CI)
+       │
+       ▼
+  CLI (Python) does real work:
+    (identical to Flow A's CLI path)
+       │
+       ▼
+  stdout → terminal
+```
+
+No plugin layer. Useful for scripts, Makefiles, GitHub Actions.
+
+**Key observation:** all three flows converge on the same CLI code path. The difference is purely in who drives the sequence — user's typed verb (A), Claude-as-orchestrator (B), or external script (C).
+```
+
 ### 2.2 Two-layer command model
 
 The CLI exposes **two layers** of commands:
@@ -131,9 +198,36 @@ Plugin commands shell out to Layer A. Layer A internally calls Layer B. Layer B 
                                                            (Layer A composes one or more B ops)
 ```
 
-### 2.3 Layer A — Pipeline verbs (user-facing)
+### 2.3 Layer A — Pipeline commands (user-facing)
 
-Same verb on plugin and terminal surfaces. Pipeline-position-aware; reads `pipeline-journal.json` to pick up where last run left off. `Kind` column per §2.11.
+Layer A has **two flavors**, both backed by the same CLI underneath. Users pick the flavor that matches how they want to work.
+
+#### 2.3.1 Orchestrator command — `/finetune` (thick)
+
+A **single stateful command** that drives the entire pipeline in one Claude Code session. Holds running context across phases, engages the user in dialogue, makes decisions, handles surprises. Under the hood, it calls the same verb CLI as the thin commands below — but wraps them in a continuous agent loop.
+
+| Plugin | Kind | When to use |
+|---|---|---|
+| `/finetune` | `ORCHESTRATOR` | First-time users; exploratory ML research; deep iteration; anyone wanting dialogue, cross-step reasoning, and guided recovery from failures |
+
+**What the orchestrator does:**
+
+1. Reads pipeline state (`pipeline-journal.json` + `analysis.json`) on startup.
+2. Decides next action — run a phase, ask the user, diagnose a failure, iterate on the grader.
+3. Executes via tools: `Bash` to call CLI verbs, `Read`/`Write` to inspect + edit artifacts, optionally `Task` to spawn focused subagents for parallel work.
+4. Incorporates results into its running narrative.
+5. **Dialogues with the user when input is needed** — topic ambiguity, grader strategy, iteration decisions.
+6. Loops until pipeline done, blocked, or user exits.
+
+**What it does NOT do:**
+- Duplicate CLI logic — it *calls* the CLI; the CLI still owns pipeline logic, determinism, and state.
+- Hold raw artifacts (PDFs, full training.jsonl) in its context window — delegates heavy-context work to CLI-spawned workers and only reads summaries.
+
+**Why this mode exists:** see §14.10 — solves cross-step implicit reasoning, exploratory research workflows, expert deep dives, and rich mid-pipeline dialogue. These are the four dimensions where thin-only mode loses to the old monolithic SKILL.md.
+
+#### 2.3.2 Direct verb commands (thin)
+
+One slash command per pipeline phase. Each is a thin narrator that shells out to a single CLI verb. Pipeline-position-aware; reads `pipeline-journal.json` to pick up where last run left off. `Kind` column per §2.11.
 
 | Plugin | CLI (Layer A) | CLI short alias | Purpose | Duration | Kind |
 |---|---|---|---|---|---|
@@ -146,6 +240,27 @@ Same verb on plugin and terminal surfaces. Pipeline-position-aware; reads `pipel
 | `/finetune-eval` | `vllora finetune eval` | `vft eval` | Dry-run on 4B + 0.8B; readiness gate; re-run to iterate | 5–15 min/iter | `DET+COMPUTE` (on FAIL → `LLM`) |
 | `/finetune-train` | `vllora finetune train` | `vft train` | GRPO training + monitor + analyze; re-run for next round | 30 min–3 hr | `DET+COMPUTE + LLM` (monitor) |
 | `/finetune-status` | `vllora finetune status` | `vft status` | Print pipeline-level current step + suggest next command | instant | `PURE` |
+
+**When to use thin mode:** power users who know exactly which step they want; re-running specific steps; scripted workflows inside Claude Code; users who prefer explicit control over agent improvisation.
+
+#### 2.3.3 Three user-facing modes, same CLI underneath
+
+```
+  User intent                        →  Uses                          →  Underneath
+  ──────────                            ────                             ──────────
+  
+  "Drive the whole pipeline for me,    /finetune            ────────┐
+   engage me, reason, handle           (orchestrator, thick,        │
+   surprises."                          stateful, dialogue)         │
+                                                                    ▼
+  "I know the step I want — run it."   /finetune-<verb>     ──▶  vllora finetune
+                                       (thin wrapper)              <verb>
+                                                                    ▲
+  "CI / automation, no chat."          vllora finetune <verb>──────┘
+                                       (CLI direct)
+```
+
+All three call into the **same CLI code path**. The orchestrator adds a reasoning + dialogue layer on top of the thin verbs; the thin verbs add a narration layer on top of the CLI; the CLI is the real pipeline.
 
 ### 2.4 Layer B — Job operations (backend contract)
 
@@ -298,9 +413,9 @@ Every command is classified by how it executes. This affects testing strategy, c
 
 ### 2.12 User journey — how someone uses the plugin
 
-Chat-centric view. The same verbs work from the terminal, but the plugin surface is what most users hit first.
+Chat-centric view. Users pick between **orchestrator mode** (thick agent drives everything) or **thin-verb mode** (type each phase explicitly). Both use the same CLI underneath.
 
-#### 2.12.1 Happy-path chat transcript (condensed)
+#### 2.12.1a Happy-path chat — orchestrator mode (recommended default)
 
 ```
  [ TERMINAL — one-time setup ]
@@ -310,10 +425,45 @@ Chat-centric view. The same verbs work from the terminal, but the plugin surface
   $ vllora init
     ✓ Claude Code detected, plugin installed
     ✓ Gateway started on :9090
-    ✓ Done. Open Claude Code and type /finetune-quickstart
+    ✓ Done. Open Claude Code and type /finetune to start.
  
  
- [ CLAUDE CODE CHAT — the whole pipeline lives here ]
+ [ CLAUDE CODE CHAT — one session, orchestrator drives the whole pipeline ]
+ 
+  USER   ▸  /finetune
+  AGENT  ▸  "Let's fine-tune a model. What do you have and what's the goal?"
+ 
+  USER   ▸  "PDFs of our refund policy. Want a support agent that
+             answers questions about refunds and order changes."
+  AGENT  ▸  [calls `vllora finetune init "..."`] "Workflow wf-abc12 created."
+            [calls `vllora finetune sources ./pdfs`] "Extracted 12 PDFs."
+            [calls `vllora finetune plan`]
+            "I drafted 8 topics. Two of them — 'partial-refund' and
+             'refund-exceptions' — have significant overlap (~70% shared
+             knowledge). Want me to merge them?"
+ 
+  USER   ▸  "yes, merge"
+  AGENT  ▸  [edits topics.json, re-runs plan]
+            [calls `vllora finetune generate`]
+            "Quality gate PASS (240 records). Grader draft tests cleanly."
+            [calls `vllora finetune eval`]
+            "Readiness PASS on iter 1. Selected: qwen-4b. Training now?"
+ 
+  USER   ▸  "go"
+  AGENT  ▸  [calls `vllora finetune train`, monitors 2 hrs]
+            [pings user when done]
+            "Training complete. Adapter: adapter-xyz. Converged cleanly.
+             Final grader reward: 0.83 avg. Full report in training/monitor-report-1.md."
+ 
+  USER   ▸  🎉
+```
+
+Notice: **one conversation, one `/finetune` command**, orchestrator handles everything. User engaged only at decision points (topic merge, go-ahead for training). Compare this with §2.12.1b (thin-verb mode) which requires 5–7 explicit slash commands.
+
+#### 2.12.1b Happy-path chat — thin-verb mode (explicit control)
+
+```
+ [ CLAUDE CODE CHAT — user drives each phase ]
  
   USER   ▸  /finetune-quickstart
   AGENT  ▸  "6 steps: init → sources → plan → generate → eval → train.
@@ -351,6 +501,8 @@ Chat-centric view. The same verbs work from the terminal, but the plugin surface
  
   USER   ▸  🎉
 ```
+
+Same pipeline outcome; user drives each phase explicitly. Preferred when user wants control over *when* each phase runs (e.g., kicking off training before walking away from the laptop).
 
 #### 2.12.2 Decision points & iteration loops
 
@@ -484,6 +636,117 @@ vft auto --scenario tau-retail --max-iterations 5
 | Gateway offline | Agent reports connection error | `vllora gateway start` (terminal); re-run command |
 | Claude auth expired | Agent reports 401 from `claude -p` | `claude login` (terminal); re-run command |
 
+### 2.13 How our UX compares to peer platforms
+
+Context for the design choices above. vllora's journey is unusual in two specific ways: **Claude Code plugin as primary surface**, and **LLM-driven pipeline orchestration**.
+
+#### 2.13.1 At-a-glance comparison
+
+| Platform | Install / surface | Grader authoring | Data auto-gen | LLM drives pipeline | Observability | Target user |
+|---|---|---|---|---|---|---|
+| **vllora (us)** | **Claude Code plugin + CLI** | **Auto (LLM from traces / PDFs)** | **Yes (LLM workers)** | **Yes** | Journal + UI | App dev / PM |
+| OpenPipe (RFT) | SDK + Web UI | Manual (Python) | Partial (Mixture of Agents) | No | Dashboard (best-in-class rollout inspector) | App dev |
+| OpenAI Fine-tuning (RFT) | API + Dashboard | Manual (Python / LLM-judge) | No | No | Dashboard + W&B | App dev |
+| HuggingFace AutoTrain | Spaces UI + CLI | None (SFT / DPO) | No | No | HF Spaces UI | ML engineer / hobbyist |
+| Axolotl | YAML CLI | Manual Python reward fn | No | No | W&B / logs | ML engineer |
+| LlamaFactory | CLI + Gradio UI | Manual Python reward fn | No | No | Gradio + W&B | ML engineer |
+| Together AI | API + CLI | Manual (GRPO in preview) | No | No | Dashboard | App dev |
+| Modal | Python code + serverless GPU | User-defined | User-defined | No | Modal dashboard | Platform engineer |
+| DSPy / TextGrad | Python library | Metric fn | Yes (bootstrap) | **Yes (optimizes prompts only)** | Console | Researcher |
+| Unsloth | Colab notebook | Manual Python reward fn | No | No | Notebook + W&B | Hobbyist |
+
+#### 2.13.2 Representative first-run commands
+
+```
+OpenAI:        openai.fine_tuning.jobs.create(training_file="file-xyz", model="...")
+OpenPipe:      SDK proxy records → UI workflow → YAML RFT config
+AutoTrain:     autotrain --config config.yml  (or web UI)
+Axolotl:       axolotl train config.yml
+LlamaFactory:  llamafactory-cli train --config_file train.yaml
+Together:      together fine-tuning create --training-file file-xxx --model ...
+Modal:         modal run finetune.py                    (user writes everything)
+DSPy:          teleprompter.compile(module, trainset=...)
+Unsloth:       open Colab notebook → click "Run All"
+
+vllora:        /finetune-quickstart                     (in Claude Code chat)
+         or:   vllora finetune quickstart
+```
+
+Everyone else: **code / config → train → result.** We: **chat → agent drives it.**
+
+#### 2.13.3 What we do that nobody else does
+
+1. **Claude Code plugin as primary surface.** No competitor ships slash-command UX. Closest analog is DSPy (a Python library). Pro: agentic UX for non-ML users. Con: hard dependency on Anthropic's product + niche install base.
+2. **LLM-driven pipeline orchestration via `claude -p` workers.** DSPy/TextGrad use LLMs to optimize prompts; we use LLMs to **author the grader, derive topics, reconcile ground truth, diagnose clipping** — broader agentic scope.
+3. **PDFs + OTel traces as first-class inputs.** OpenPipe records traces via its proprietary SDK proxy; nobody ingests open OTel. Nobody ingests PDFs for grader synthesis.
+4. **Grader auto-generated from source materials.** Every other GRPO platform requires the user to write the reward in Python. This is our single biggest differentiator for non-ML users.
+
+#### 2.13.4 Where competitors are ahead
+
+1. **Hosted deployment endpoint.** OpenPipe / OpenAI / Together give an OpenAI-compatible API endpoint at the end. We return weights + an adapter ID; user self-serves.
+2. **Live dashboard quality.** OpenPipe's reward curves + rollout inspector is best-in-class. Our UI is catching up (Training Impact, pagination) but behind on live training telemetry.
+3. **Low-friction first experience.** Unsloth's "open Colab → click Run All" is hard to beat. Requiring Claude Code + gateway + plugin + distri is heavier lift.
+4. **Ecosystem integrations.** W&B / MLflow / TensorBoard are table stakes for ML engineers. Our JSONL journal doesn't plug into their existing tools.
+
+#### 2.13.5 Where we're on par
+
+- **GRPO method sophistication** — adaptive epochs, clipping diagnosis, TP-tiered floor, topic/GT reconciliation are competitive with OpenPipe RFT and ahead of Axolotl / LlamaFactory / Unsloth defaults.
+- **OSS CLI surface** — `vllora finetune` is comparable to `axolotl train` or `llamafactory-cli`.
+- **Base model coverage** — Qwen 3.5 0.8B / 2B / 4B matches what Unsloth / Axolotl users pick for local GRPO.
+
+#### 2.13.6 Design implications
+
+- **Keep "Claude Code first."** It's our moat. But preserve a real terminal-only path (`vft` + `auto`) so skeptics can try before adopting the plugin — §2.12.5 covers this.
+- **Don't skimp on the live dashboard.** If we win non-ML users with agentic UX, we also need OpenPipe-quality rollout inspection — otherwise they hit a wall when troubleshooting.
+- **Hosted inference is a gap worth closing.** Even a basic "load adapter into gateway, serve at `/v1/chat/completions`" closes the deploy-story gap with OpenPipe / OpenAI / Together.
+- **Ecosystem integration is optional but valuable.** Emit W&B events as an extra signal for ML engineers evaluating us.
+- **Quickstart fixtures matter.** Ship the tau-retail demo + target 5-minute happy-path equivalent to "click Run All."
+
+> **Methodology note.** Platform descriptions are based on docs and public flows as of early 2026. GRPO/RFT coverage on OpenPipe, OpenAI, and Together has been evolving rapidly — verify current feature sets before external claims.
+
+### 2.14 Multi-harness plugin strategy
+
+Claude Code is the primary surface for v0. The architecture is **host-agnostic at the CLI + thin-verb layer** — additional hosts ship as separate per-host plugins that wrap the same CLI.
+
+**What ports across hosts:** CLI (`vllora finetune <verb>`) + thin verb commands (one per phase).
+**What does NOT port:** the orchestrator command (`/finetune`). It's a Claude-Code-specific agent pattern; each host can build its own equivalent or users fall back to thin verbs on non-Claude-Code hosts. The pipeline stays accessible on every host — only the orchestration shape differs.
+
+**Invariant:** The CLI is the integration point. Plugins are per-host, thin wrappers that shell out. Zero pipeline logic lives in any plugin.
+
+**User journey through OpenClaw** (illustrative — captures how the same verbs reach a mobile chat surface):
+
+```
+  USER (WhatsApp / Telegram / Slack / iMessage)
+      │
+      │  "fine-tune a support agent from these PDFs"  + attach 3 PDFs
+      ▼
+  OPENCLAW
+      │  saves PDFs to local dir, dispatches to @vllora/openclaw-plugin
+      ▼
+  @vllora/openclaw-plugin
+      │  spawn  vllora finetune quickstart --sources <dir> --non-interactive
+      ▼
+  vllora CLI                        (same path as Claude Code plugin)
+      │  init → sources → plan → generate → eval → train
+      │  each LLM step spawns workers (claude -p)
+      │  all artifacts uploaded → GATEWAY + DB
+      ▼
+  stdout stream  ──▶  OPENCLAW  ──▶  USER's chat (formatted per surface)
+
+   ⋮
+   "Extracting 3 PDFs… done."
+   "Draft: 8 topics. View plan.md: <link>."
+   "Generated 240 records. Quality gate PASS."
+   "Eval iter 1/5: readiness PASS. Selected: qwen-4b."
+   "Training started. I'll ping when done (~2 hrs)."
+        …  [user closes chat]  …
+   "Training complete! Adapter: adapter-xyz."
+```
+
+**Key point:** the `vllora finetune *` invocation is identical regardless of host. OpenClaw adds one relay actor at the front (user's chat → plugin) and one at the back (async ping when long work completes). The pipeline, gateway writes, journal, and auth all stay unchanged.
+
+**Full integration spec:** see [openclaw-integration.md](./openclaw-integration.md) — plugin shape + TypeScript example, full end-to-end pipeline diagram, value-add analysis, shipping criteria, and generalization to other hosts (OpenCode, Cline, Aider, …).
+
 ---
 
 ## 3. End-to-End Flow
@@ -495,20 +758,34 @@ Six roles participate in the flow. Understanding who does what makes the diagram
 | Actor | Role | Lives in |
 |---|---|---|
 | **USER** | Types commands in chat or terminal. Reviews `plan.md`, decides when to proceed. | — |
-| **PLUGIN** | Thin narrator. Reads `plugin/commands/*.md`, shells out to CLI, pipes stdout back to Claude Code. | `~/.claude/plugins/vllora-finetune/` |
+| **ORCHESTRATOR** | (Optional, plugin-only) Thick Claude Code agent driven by `/finetune`. Holds pipeline context across phases, dialogues with user, calls CLI via Bash. Only present when user chose orchestrator mode (§2.3.1). | `~/.claude/plugins/vllora-finetune/commands/finetune.md` |
+| **PLUGIN (thin)** | Thin narrators per phase. Each `/finetune-<verb>` reads a `.md` file, shells out to one CLI verb, pipes stdout back. | `~/.claude/plugins/vllora-finetune/commands/finetune-<verb>.md` |
 | **CLI** | Python process. Coordinates workers + scripts + gateway. Writes local files, uploads to DB. | `vllora/cli/finetune/` |
 | **WORKERS** | `claude -p` subprocesses for LLM-heavy work. Inherit user's auth. | Spawned by CLI; prompts in `vllora/cli/finetune/prompts/` |
 | **GATEWAY+DB** | Rust HTTP server @ `:9090` + SQLite at `~/.vllora/vllora.db`. Runs model inference for eval + GRPO training. | `~/.vllora/bin/vllora-gateway` |
 | **UI** | React app @ `:5173`. Read-only view. Polls gateway for updates. | `vllora ui start` |
 
+> **Orchestrator vs Plugin (thin):** both live in the plugin directory. Orchestrator is one command (`/finetune`); thin plugins are the 9 verb commands. The orchestrator *calls* the thin commands (or the CLI directly) as its tools — they compose, not compete.
+
 ### 3.2 Two entry paths (high-level)
+
+Three entry commands, two pipeline paths.
 
 ```
                 (User has PDFs / traces / task / pre-built dataset)
                                         │
+                           ┌────────────┼────────────┐
+                           ▼            ▼            ▼
+                       /finetune    /finetune-  vllora finetune
+                       (orches-       init       init <obj>
+                        trator;      (thin)      (CLI direct)
+                        asks user,
+                        picks path)
+                           │            │            │
+                           └────────────┼────────────┘
                                         ▼
                               ┌─────────────────────┐
-                              │  /finetune-init     │
+                              │ workflow created    │
                               └──────────┬──────────┘
                                          │
                        ┌─────────────────┴──────────────────┐
@@ -544,20 +821,50 @@ Six roles participate in the flow. Understanding who does what makes the diagram
                                  (Adapter ready)
 
   /finetune-status — callable anytime; pure; reads journal, suggests next.
+
+  When the user started in orchestrator mode (/finetune), each phase above
+  is still a CLI invocation — just driven by the orchestrator-agent rather
+  than a typed slash command. The pipeline shape is identical.
 ```
 
 ### 3.3 Per-phase actor flow
 
 Each phase below is a step-by-step trace. **Every line starts with the acting actor in brackets** so there's zero ambiguity about who does what.
 
+The flows below show **thin-verb mode** (user types each slash command). In orchestrator mode (`/finetune`), the `[USER]` and `[PLUGIN]` lines at the top of each phase are replaced by `[ORCHESTRATOR]` issuing the same `vllora finetune <verb>` call autonomously — but everything from `[CLI]` downward is identical. See §3.3.0 for the orchestrator variant.
+
 Conventions:
-- `[USER] …` means the user performs this action.
-- `[PLUGIN] …` the Claude Code plugin (thin narrator).
+- `[USER] …` the user performs this action.
+- `[ORCHESTRATOR] …` the `/finetune` agent, only in orchestrator mode.
+- `[PLUGIN] …` a thin verb command (`finetune-<verb>.md`) in the Claude Code plugin.
 - `[CLI] …` the `vllora` Python CLI.
 - `[WORKER:<name>] …` a `claude -p` subprocess spawned by the CLI.
 - `[GATEWAY] …` the Rust gateway + SQLite DB.
 - `[UI] …` the React frontend.
 - `→` indicates a cross-actor message/call.
+
+---
+
+#### PHASE 3.3.0 — Orchestrator variant (applies to all phases)
+
+In orchestrator mode, the `[USER]`/`[PLUGIN]` prefix for each phase below becomes:
+
+```
+ (1) [USER]          types /finetune in Claude Code (once, at session start)
+ (2) [ORCHESTRATOR]  loads commands/finetune.md, reads journal + analysis,
+                     decides to run the next phase, OR asks user for input
+ (3) [ORCHESTRATOR]  invokes: Bash("vllora finetune <verb>")
+                        ─── equivalent to [PLUGIN] shells out to [CLI] below ───
+ (4) [CLI]           (unchanged — executes the phase; see phase trace below)
+ (5) [ORCHESTRATOR]  receives CLI output, reads resulting artifacts (plan.md,
+                     analysis.json updates), incorporates into running narrative
+ (6) [ORCHESTRATOR]  decides: run next phase, or pause to dialogue with user
+ (7) [USER]          (optional) dialogues with orchestrator about topics,
+                     grader decisions, fix suggestions — no new slash commands
+                     needed; conversation continues
+```
+
+Steps (1)–(3) and (5)–(7) are the orchestrator's loop. Step (4) — the actual CLI execution — is **identical** to thin-verb mode. That's the load-bearing property of the hybrid: one pipeline, two orchestration shapes.
 
 ---
 
@@ -1215,8 +1522,13 @@ Re-running any command:
 
 ### 3.6 Interaction modes
 
-- **Interactive (chat or terminal).** User types commands one at a time. Each command prints `Next: /finetune-<verb>`.
-- **Autonomous (CI / scripted).** `vllora finetune auto --scenario X` loops `status → next-command` until done or blocked.
+Three modes, same pipeline underneath (see §2.3 for the command surface, §2.1 for execution flow):
+
+- **Orchestrator (chat, guided).** User types `/finetune` once. A Claude Code agent drives all phases, engages in dialogue, carries context across steps. Best for first-time users, exploratory runs, expert deep dives. See §2.3.1 + §14.10.
+- **Thin verbs (chat, precise).** User types `/finetune-<verb>` one phase at a time. Each command prints `Next: /finetune-<verb>`. Best for power users who know exactly which step they want. See §2.3.2.
+- **Autonomous (CI / scripted).** `vllora finetune auto --scenario X` loops `status → next-command` until done or blocked. No Claude Code session needed. See §2.3.2 CLI + §10.3 CI.
+
+All three share `pipeline-journal.json`, so a user can switch modes between sessions — start in orchestrator on day one, resume with a direct verb command on day two.
 
 ---
 
@@ -2374,7 +2686,326 @@ Long-running. Only worker that polls external state continuously.
 
 ---
 
-## 7. File Layout
+## 7. Claude Code Plugin Structure
+
+§6 covered the CLI workers. This section covers the **plugin** — what ships inside `~/.claude/plugins/vllora-finetune/`, what each file contains, and what logic the plugin itself owns vs delegates to the CLI.
+
+### 7.1 Directory tree (detailed)
+
+```
+~/.claude/plugins/vllora-finetune/         (symlinked from pip package's plugin/ dir)
+│
+├── plugin.json                            (manifest — §7.2)
+├── README.md                              (plugin overview; visible in Claude Code marketplace)
+│
+├── commands/                              (1 orchestrator + 9 thin verb commands)
+│   ├── finetune.md                        (ORCHESTRATOR — thick, stateful — §7.3.1)
+│   ├── finetune-quickstart.md             (guided wizard — §7.3.2)
+│   ├── finetune-init.md                   (scaffold workflow)
+│   ├── finetune-sources.md                (ingest PDFs / traces / URIs)
+│   ├── finetune-import-dataset.md         (pre-built dataset entry)
+│   ├── finetune-plan.md                   (topics + grader draft)
+│   ├── finetune-generate.md               (records + finalize grader)
+│   ├── finetune-eval.md                   (readiness gate + iterate)
+│   ├── finetune-train.md                  (GRPO + monitor)
+│   └── finetune-status.md                 (pure read, suggest next)
+│
+├── skills/                                (auto-loaded reference context)
+│   ├── pipeline-context/SKILL.md          (architecture overview — loads on any /finetune-*)
+│   ├── grader-writing/SKILL.md            (grader templates + failure patterns)
+│   ├── topic-hierarchy/SKILL.md           (topic design guidance)
+│   ├── readiness-gate/SKILL.md            (gate-failure interpretation)
+│   └── nemo-guide/SKILL.md                (training config reference)
+│
+└── resources/                             (static files referenced by commands)
+    ├── templates/                         (markdown templates for rendered artifacts)
+    ├── prompts/                           (canonical prompts included by commands)
+    └── examples/                          (reference grader.js files, topic examples)
+```
+
+### 7.2 `plugin.json` manifest
+
+```json
+{
+  "$schema": "https://claude.com/schemas/plugin.json",
+  "name": "vllora-finetune",
+  "version": "0.6.0",
+  "description": "Fine-tune small LLMs from PDFs, OTel traces, or pre-built datasets using GRPO.",
+  "author": { "name": "vllora", "url": "https://vllora.dev" },
+  "homepage": "https://vllora.dev",
+  "commands": ["commands/*.md"],
+  "skills":   ["skills/*/SKILL.md"],
+  "requires": {
+    "cli":         "vllora >= 0.6.0",
+    "claude-code": ">= 1.2.0"
+  }
+}
+```
+
+The manifest tells Claude Code how to load the plugin. **Exact schema TBD** — §11 Q3 tracks verification against Claude Code's actual plugin loader.
+
+### 7.3 Command file structure
+
+Every command is a markdown file with YAML frontmatter + body. The frontmatter defines the trigger surface (Claude Code's matcher); the body is the agent's playbook for executing the command.
+
+#### Template
+
+```markdown
+---
+description: |
+  <one-paragraph description; include trigger phrases so Claude Code matches
+   natural-language intent, not just the exact slash command>
+allowed-tools: Bash
+---
+
+# /finetune-<verb>
+
+<role statement — what this command does in one sentence>
+
+## Preconditions
+- <journal state required>
+- Validate via `vllora finetune status` before running
+
+## Steps
+1. Confirm <inputs> with user if ambiguous
+2. Shell out: `vllora finetune <verb> [args]`
+3. Stream stdout back to user (includes CLI worker progress events)
+4. Interpret final output:
+   - On success: echo "Next: /finetune-<next-verb>"
+   - On failure: explain fix, suggest next action
+
+## Error handling
+- CLI exits non-zero → relay stderr to user, suggest `/finetune-status`
+- Missing preconditions → tell user the required prior command
+
+## Related skills
+- <list of auto-loaded skills relevant when this command runs>
+```
+
+#### 7.3.1 Orchestrator command — `finetune.md`
+
+Unlike thin verb commands, the orchestrator is a **stateful agent command**. Its file contains:
+
+- Frontmatter with `allowed-tools: Bash, Read, Write, Edit, Task`
+- A playbook telling Claude Code: *"You are the vllora fine-tune orchestrator. Read pipeline state, plan next actions, call CLI verbs, talk to the user, loop until done."*
+- Decision rules: when to run a verb vs ask the user vs diagnose
+- Handoff conventions: how to read artifact state to bootstrap mid-pipeline
+
+Template:
+
+```markdown
+---
+description: |
+  Drive the entire vllora fine-tune pipeline from start to finish in one session.
+  Holds context across phases, makes decisions, engages the user in dialogue.
+  Best for first-time users, exploratory runs, and expert deep dives.
+  Triggers: "fine-tune a model", "help me fine-tune", "drive the pipeline",
+            "I want to train a model from these PDFs".
+allowed-tools: Bash, Read, Write, Edit, Task
+---
+
+# /finetune — Pipeline Orchestrator
+
+You are the vllora fine-tune orchestrator. Drive the pipeline end-to-end,
+carrying context across phases. Delegate deterministic + LLM-heavy work to
+the CLI; handle reasoning + dialogue yourself.
+
+## Startup
+1. Run `vllora finetune status` to determine current pipeline state.
+2. Read `finetune-project/analysis.json` and `pipeline-journal.json` if they exist.
+3. Read the reference skills (pipeline-context, grader-writing, topic-hierarchy,
+   readiness-gate) — they're auto-loaded; use them.
+4. Greet the user + summarize where we are (fresh project vs mid-pipeline).
+
+## Phase loop
+For each phase (init → sources → plan → generate → eval → train):
+1. Check preconditions via journal + `vllora finetune status`.
+2. Decide: run the phase now, or ask the user first?
+3. If running: `vllora finetune <verb>` via Bash; stream output to user.
+4. Read the resulting artifacts (plan.md, analysis.json updates, change-log.md).
+5. Incorporate reasoning into your running narrative (for future phases).
+6. On quality-gate / readiness failures: diagnose from artifacts; propose fix;
+   ask user; apply fix; re-run the affected verb.
+7. After each phase: suggest next action, optionally pause for user input.
+
+## When to engage the user
+- Ambiguous topic boundaries — ask whether to merge/split.
+- Grader strategy trade-offs — explain options, let user pick.
+- Iteration budget exhausted — explain root cause, ask how to proceed.
+- User wants to steer ("try a different base model", "focus on X topic").
+
+## What NOT to do
+- Do not duplicate CLI logic. Always `vllora finetune <verb>` for pipeline work.
+- Do not hold raw PDFs or full training.jsonl in context — read summaries only.
+- Do not silently retry failures. Diagnose first, explain to user, act on user input.
+- Do not advance journal manually. CLI owns journal writes.
+
+## Loading reference skills
+- `grader-writing` — loaded automatically. Use for grader decisions.
+- `pipeline-context` — loaded automatically. Use for architecture questions.
+- `topic-hierarchy` — loaded automatically. Use for topic design.
+- `readiness-gate` — loaded automatically. Use when eval fails.
+- `nemo-guide` — loaded automatically. Use for training config questions.
+
+## Exit conditions
+- Pipeline complete (train=done, adapter_id returned) — summarize, congratulate.
+- User says stop — record state, suggest `/finetune-status` for resume later.
+- Unrecoverable failure — explain, preserve artifacts, suggest escalation path.
+```
+
+#### 7.3.2 Example — `finetune-plan.md` (full, thin verb)
+
+```markdown
+---
+description: |
+  Build the topic hierarchy, relations, and an initial grader draft for the current
+  fine-tune workflow. Requires /finetune-sources to have completed.
+  Triggers: "plan my fine-tune", "build topics", "draft the grader",
+  "proceed with plan", "next step after sources".
+allowed-tools: Bash
+---
+
+# /finetune-plan
+
+Build the workflow's topic hierarchy + grader draft. Requires `sources` completed.
+
+## Preconditions
+- `finetune-project/pipeline-journal.json` shows `sources: { status: done }`
+- If not, tell user: "Run /finetune-sources first" and exit.
+
+## Steps
+1. Run `vllora finetune status` to verify preconditions.
+2. Shell out: `vllora finetune plan`
+3. Stream stdout. The CLI will emit progress events from `relation_builder` and
+   `grader_drafter` workers; pass them through so the user sees real-time updates.
+4. On completion:
+   - Read `finetune-project/plan.md`
+   - Summarize for user: topic count, grader template picked
+   - Suggest: "Review plan.md. Next: /finetune-generate (or edit topics.json first)."
+5. If user edits `topics.json` and re-runs `/finetune-plan`, the CLI handles idempotency —
+   no special logic needed here.
+
+## Error handling
+- CLI exits non-zero → relay stderr; suggest `/finetune-status` to diagnose.
+- `plan.md` missing → something went wrong; suggest `vllora finetune plan --force`.
+
+## Related skills
+- `pipeline-context` (auto-loaded)
+- `topic-hierarchy` (if user asks about topic design)
+- `grader-writing` (if user wants the grader draft explained)
+```
+
+### 7.4 Reference skills structure
+
+Each reference skill is a directory with `SKILL.md` (auto-loaded on match) plus optional companion files. Skills encode domain knowledge that the agent uses when executing commands.
+
+#### Template
+
+```markdown
+---
+name: <skill-id>
+description: |
+  <when Claude Code should auto-load this skill — trigger phrases matter>
+---
+
+# <Skill Title>
+
+<Expert content: templates, rules, failure patterns, examples, gotchas>
+```
+
+#### Example — `grader-writing/SKILL.md` (abbreviated)
+
+```markdown
+---
+name: grader-writing
+description: |
+  Auto-load when writing, reviewing, or diagnosing a grader.js. Triggers:
+  grader failing, reward function tuning, label-set vs ranking choice,
+  tpFloor / OOV / duplicate handling questions.
+---
+
+# Grader Writing Guide
+
+## Pick the template
+
+| Task type                 | Template       | Example                   |
+| ------------------------- | -------------- | ------------------------- |
+| Multi-label classification| label-set      | topic tagging             |
+| Ranking / ordering        | rank           | search result ordering    |
+| Free-text generation      | completion     | summarization             |
+| Tool-calling agents       | tool-match     | function-call accuracy    |
+
+## Common failure patterns
+
+### Pattern: hard-gate zero
+**Symptom:** grader returns exactly 0.0 for most attempts; zero_variance_frac > 0.8.
+**Cause:** grader gates valid-but-imperfect answers to 0 too aggressively.
+**Fix:** apply tpFloor = 0.22 + (tp/gt) * 0.10 when tp > 0.
+
+### Pattern: OOV gaming
+**Symptom:** high trivial_frac; model emits garbage tokens and still scores.
+**Cause:** parseLabels silently drops out-of-vocab segments.
+**Fix:** countOOVSegments and add to fp.
+
+### Pattern: duplicate emissions
+**Symptom:** model repeats the same label; multiset semantics needed.
+**Fix:** countDuplicateEmissions; add to fp.
+
+(etc. — full content migrated from existing reference/grader-writing.md)
+```
+
+### 7.5 What the plugin DOES
+
+The plugin's job is narrow and well-defined:
+
+- ✓ **Interpret user intent** from natural language or slash command.
+- ✓ **Validate preconditions** via `vllora finetune status` before acting.
+- ✓ **Shell out** to `vllora finetune <verb>` with CLI args derived from context.
+- ✓ **Stream progress** from CLI stdout back to the user's chat.
+- ✓ **Interpret final output** — summarize success, explain failures.
+- ✓ **Suggest next steps** by relaying `Next: /finetune-<verb>` hints from the CLI.
+- ✓ **Load reference skills** when user asks meta-questions (about graders, topics, etc.).
+
+### 7.6 What the plugin does NOT do
+
+If a plugin command is doing any of the following in prose, it's wrong:
+
+- ✗ Parsing PDFs, extracting knowledge, or generating training records — CLI workers do this.
+- ✗ Writing files in `finetune-project/` — CLI does this.
+- ✗ Talking to the gateway directly — CLI does this.
+- ✗ Advancing `pipeline-journal.json` — CLI does this.
+- ✗ Deciding eval readiness, grader refinement triggers, or training convergence — CLI does this.
+- ✗ Running any Python / shell scripts other than `vllora finetune ...`.
+- ✗ Maintaining state between sessions — journal + DB are the state stores.
+- ✗ Auto-chaining commands (except `/finetune-quickstart` which is explicitly a wizard).
+
+### 7.7 Composition rule — every phase is user-triggered
+
+Plugin commands **never auto-invoke other plugin commands**. Chaining happens only via the suggested "Next: /finetune-<verb>" hint:
+
+```
+ CLI prints → "Next: /finetune-eval"   (last line of stdout)
+ Plugin    → relays to user
+ User      → decides; types /finetune-eval
+```
+
+Exception: `/finetune-quickstart` is explicitly a wizard and chains `init` + `sources` after the user answers wizard prompts. All other commands are single-step.
+
+This matches §8 invariant: "every phase is user-triggered — nothing runs autonomously."
+
+### 7.8 Keeping the plugin in sync with the CLI
+
+Both ship from the same pip package (§3 Distribution Architecture). Rules:
+
+- Command frontmatter mentions trigger phrases → keep aligned with CLI verb names.
+- When a CLI verb changes (flag added, semantics shift), update the matching command `.md`.
+- Reference skills are versioned with the CLI — when grader patterns change, `grader-writing/SKILL.md` updates.
+- `requires` in `plugin.json` pins `cli >= <version>` — prevents running plugin against too-old CLI.
+- Contract tests verify: for each CLI verb, a matching `commands/<verb>.md` exists, with correct preconditions listed.
+
+---
+
+## 8. File Layout
 
 ### 7.1 In the `vllora` pip package
 
@@ -2431,26 +3062,28 @@ finetune-project/                    # see §4.1 for full tree
 
 ---
 
-## 8. Invariants
+## 9. Invariants
 
 - **Idempotent.** Re-running a command reads the journal and skips completed sub-steps. `--force` to redo.
 - **Journal is source of truth.** `pipeline-journal.json` is the only store for "where am I."
 - **Status is pure.** No mutations. No network calls (reads cached analysis).
 - **Implicit approval.** Running `generate` after `plan` = approval. No `--approve` flag.
 - **Same verb, same behavior.** `vllora finetune eval` and `/finetune-eval` produce identical artifacts.
-- **Plugin is thin.** No Python, no pipeline logic, no direct gateway calls. Only narrates CLI output.
+- **Plugin has no pipeline logic.** No Python in plugin files; no direct gateway calls; no file writes outside what a CLI call triggers. Applies to both thin verb commands (which only narrate) and the orchestrator (which reasons + dialogues but always calls CLI for pipeline work).
 - **CLI inherits auth.** `claude -p` uses whatever `claude login` or `ANTHROPIC_API_KEY` has configured. No separate key management in `vllora`.
 - **Slug IDs local, UUIDs at boundary.** Local files use slugs; gateway assigns UUIDs on upload. `reconcile-topics` keeps them mapped.
 - **UI is read-only.** React FE queries gateway. Never mutates pipeline state.
 - **Single authoritative source per artifact.** See §4 storage principle. Files and DB never both claim ownership. The "authoritative source" column is the contract.
 - **Gateway never tracks local paths.** `vllora.db` has zero references to cwd paths. The user can move, rename, or delete `finetune-project/` without affecting workflow records. (Rebuild-from-DB is a future utility, not a day-one feature.)
 - **Project files live in user's cwd.** Never in `~/.vllora/`. Matches git / Supabase / Vercel / Prisma convention.
+- **Artifacts are context carriers, not status flags.** `analysis.json`, `plan.md`, `change-log.md`, and `iterations.md` carry the *reasoning* between phases, not just outcomes. Because workers are short-lived `claude -p` subprocesses (no implicit memory across phases), these files are the handoff mechanism. Sparse or machine-only content breaks the pipeline's coherence. See §14 Architectural Tradeoffs for rationale.
+- **`analysis.json` is the running diary.** Every phase appends structured reasoning — observations, decisions, fix hints, root-cause analysis — not just numbers. It's the single document that, if read in order, explains why the pipeline made every choice it made. Workers and the UI both consume it.
 
 ---
 
-## 9. Install
+## 10. Install
 
-### 9.1 One-time setup
+### 10.1 One-time setup
 
 ```bash
 claude login                         # or set ANTHROPIC_API_KEY
@@ -2460,14 +3093,14 @@ vllora init
 
 `vllora init` does: prereq checks (Claude auth, Python, `claude` CLI, port 9090) → downloads gateway binary → starts gateway → symlinks `plugin/` → `~/.claude/plugins/vllora-finetune/` → optionally starts UI. Rolls back on error.
 
-### 9.2 Upgrade / uninstall
+### 10.2 Upgrade / uninstall
 
 ```bash
 pip install -U vllora && vllora init --repair     # upgrade
 vllora uninstall && pip uninstall vllora          # clean removal
 ```
 
-### 9.3 CI / headless
+### 10.3 CI / headless
 
 ```yaml
 env:
@@ -2480,7 +3113,7 @@ steps:
 
 ---
 
-## 10. Open Questions
+## 11. Open Questions
 
 1. `plugin.json` manifest schema — confirm exact fields, glob patterns, command/skill enumeration against current Claude Code plugin loader.
 2. Plugin auto-reload — does Claude Code re-read `~/.claude/plugins/*` on file change, or is a restart required?
@@ -2492,10 +3125,12 @@ steps:
 8. Worker tool scoping — audit `--allowedTools` list per worker (e.g., `training-monitor` only needs `Read`, `Write`, `Bash(curl *)`).
 9. Token cost disclosure — should `/finetune-status` track cumulative token usage per workflow?
 10. Dev plugin split — should `/finetune-run <scenario>`, `/finetune-analyze`, `/finetune-kill`, `/finetune-test-loop` move to a separate `vllora[dev]` plugin?
+11. **Prompt caching behavior with `claude -p`.** Load-bearing for cost: §14.9 shows the new architecture is 4–5× more expensive than the monolithic approach **without** prompt caching. Need to verify: (a) does `claude -p` use prefix caching automatically across sequential subprocess invocations from the same machine? (b) what's the cache TTL? (c) how much does our shared prefix (objective + pipeline-context + accumulated handoff) benefit from it? Add a measurement harness before P1 implementation locks in.
+12. **Run-replay contract test.** Goal: verify context-carrier artifacts preserve old-agent capability. Given a completed pipeline run's artifacts, can a fresh `claude -p` worker make the same decision at a given step? If not, artifacts are too sparse. See §14.9 for the test design.
 
 ---
 
-## 11. Non-Goals
+## 12. Non-Goals
 
 - Changing the pipeline itself (GRPO, grader, readiness, scripts — unchanged).
 - Replacing `pipeline-journal.json` (formalized, not replaced).
@@ -2505,7 +3140,7 @@ steps:
 
 ---
 
-## 12. Success Criteria
+## 13. Success Criteria
 
 - `pip install vllora` → scaffolded project in under 5 minutes.
 - New user completes one end-to-end run without docs, following `Next:` hints.
@@ -2515,3 +3150,308 @@ steps:
 - Re-running any command on a completed step is a no-op.
 - CLI + plugin versions never diverge (single pip package).
 - Claude subscribers never configure an API key — `claude login` is the only auth step.
+
+---
+
+## 14. Architectural Tradeoffs
+
+The new architecture is a significant departure from today's monolithic `SKILL.md`. This section makes the tradeoff explicit, names what we gain, names what we lose, and documents the mitigations that keep the new approach workable.
+
+### 14.1 Old approach — monolithic `SKILL.md` (what we have today)
+
+```
+  USER  →  CLAUDE CODE session
+           ├── reads SKILL.md (443 lines — the full playbook)
+           │
+           ├── orchestrates entire pipeline IN ONE CONVERSATION
+           │   ├── extracts PDFs         (sub-Task: knowledge_extractor)
+           │   ├── analyzes traces       (inline reasoning)
+           │   ├── builds topics         (inline + Task: relation_builder)
+           │   ├── writes grader         (inline reasoning)
+           │   ├── generates records     (inline)
+           │   ├── runs eval             (interprets results inline)
+           │   ├── diagnoses failures    (cross-references earlier decisions)
+           │   └── iterates              (remembers why)
+           │
+           └── all context flows through ONE agent head
+```
+
+### 14.2 New approach — plugin + CLI + short-lived workers
+
+```
+  USER  →  PLUGIN (narrator)  →  CLI (Python)  →  N ISOLATED claude -p WORKERS
+                                   │
+                                   └── state lives in files + DB
+                                       (journal, analysis.json, plan.md,
+                                        change-log.md, iterations.md)
+```
+
+### 14.3 Head-to-head
+
+Two axes to compare: **thin-only mode** (just thin verb commands + CLI, no orchestrator) vs **hybrid mode** (thin verbs + orchestrator + CLI — the chosen architecture, see §2.3). Both are compared against today's monolithic SKILL.md.
+
+| Dimension | Monolithic SKILL.md | Thin-only mode | Hybrid mode ✓ (chosen) |
+|---|---|---|---|
+| Exploratory ML research (deep-dive, rich dialogue) | ✓ | gap | ✓ (via orchestrator) |
+| Production / CI reproducibility | | ✓ | ✓ (via CLI direct) |
+| Multi-host portability (OpenClaw, OpenCode, …) | | ✓ | ✓ (via thin commands + CLI) |
+| Cross-step implicit reasoning | ✓ | 70% mitigated by artifacts | ✓ (orchestrator holds context) |
+| Testability / audit | | ✓ | ✓ (pipeline logic still in CLI) |
+| Long-running workloads (3-hr training) | | ✓ | ✓ |
+| Novice-friendly (low patience / low ML background) | | ✓ | ✓ (orchestrator guides) |
+| Expert-friendly (ML researcher doing deep iteration) | ✓ | gap | ✓ (via orchestrator) |
+| Error recovery from mid-run crash | | ✓ | ✓ |
+| Rich mid-pipeline dialogue with agent | ✓ | shifts around commands | ✓ (orchestrator dialogues natively) |
+| Scales to 1000s of users with varied workflows | | ✓ | ✓ |
+| Fast iteration on the pipeline code itself | | ✓ | ✓ |
+
+**The hybrid mode closes every "old wins" gap** without sacrificing the clean-architecture gains of the new approach. See §14.10 for why.
+
+### 14.4 The central concern
+
+**Old approach:** ONE conversation, unified context, Claude remembers everything.
+**New approach:** MANY short-lived workers, context reloaded from files at each step.
+
+If the new architecture is naïvely implemented — workers just reading JSON status flags — we lose the cross-step reasoning that made the old approach powerful. The "why we picked this grader template" knowledge never makes it from `plan` to `eval refine` unless explicitly serialized.
+
+### 14.5 Mitigations (first-class design choices, not afterthoughts)
+
+These five patterns make the new architecture viable:
+
+#### M1 — Artifacts-as-context, not artifacts-as-status
+
+Every serialized file is designed to be a **context carrier** with prose reasoning, not just numeric state:
+
+| Artifact | What it carries |
+|---|---|
+| `analysis.json` | **Running diary.** Each phase appends observations, decisions, fix hints, root-cause analysis. |
+| `plan.md` | Human-readable plan with grader rationale + topic design reasoning (not just IDs). |
+| `change-log.md` | Grader modifications with the diagnosis that triggered each change. |
+| `iterations.md` | Per-iteration reasoning across eval rounds. |
+| `monitor-report-N.md` | Training monitor's narrative: what it saw, what it diagnosed, what it recommends. |
+
+Read in order, these files tell the full story of the pipeline's choices. A worker handed this bundle starts with roughly the same context Claude had 20 messages into the old approach.
+
+> Enforced via §9 invariant: **"Artifacts are context carriers, not status flags."**
+
+#### M2 — Rich system prompts inherit context
+
+Each worker's `claude -p` system prompt includes:
+- The objective.
+- A curated summary of prior-phase decisions (from `analysis.json`).
+- The full journal state.
+- The relevant reference skill(s) auto-loaded.
+
+Workers never start from zero. They start where a junior engineer would after project handoff.
+
+#### M3 — The user is the continuity thread
+
+In chat, the user is **persistent across all sub-conversations**. They:
+- Read `plan.md` between `/finetune-plan` and `/finetune-generate`.
+- Hold the "why we're doing this" anchor.
+- Decide which fix suggestion to follow.
+- Notice when an earlier choice was wrong.
+
+Old approach: Claude holds continuity.
+New approach: **user + explicit artifacts jointly hold it.** For non-ML users (our target), this is actually a better fit — they're not forced to re-read a 40-message transcript to understand state.
+
+#### M4 — Reference skills auto-load per worker
+
+Domain context (`grader-writing`, `pipeline-context`, `topic-hierarchy`, `readiness-gate`, `nemo-guide`) loads automatically when relevant. Accumulated best practices are inherited, not re-derived.
+
+#### M5 — `quickstart` preserves old-style single-session orchestration for exploratory runs
+
+`/finetune-quickstart` deliberately chains `init → sources` in ONE Claude Code session, not as separate subprocess spawns. For users who value the "Claude is with me the whole time" feel for first-run exploration, that path exists.
+
+Future extension: a `/finetune-drive` or `/finetune-all` that keeps one Claude session active across the whole pipeline (old-style orchestration) while the CLI still persists state. Best of both worlds, at the cost of maintaining two orchestration modes.
+
+### 14.6 When mitigations aren't enough
+
+Cases where the new architecture is demonstrably worse than the old:
+
+- **Deeply exploratory runs.** ML researcher wants to try 10 grader variants, each with nuanced reasoning about what to change and why. Old SKILL.md handles this as natural dialogue. New approach requires careful prompt engineering to avoid losing subtle intent.
+- **Ambiguous mid-pipeline decisions.** "This topic boundary is fuzzy — should we merge, split, or keep?" works better as a conversation than as a command interaction.
+- **Non-standard failure modes.** When something goes wrong in a way our diagnostic code didn't anticipate, the old agent can improvise. The new CLI has fixed behaviors.
+
+For these cases, power users can always:
+1. Run `vllora finetune` verbs manually with flags (`--force`, custom configs).
+2. Edit artifacts (`topics.json`, `grader.js`) directly.
+3. Use the old `SKILL.md` path during the transition (P0–P8 per the migration in the companion doc).
+
+### 14.7 Decision
+
+**We commit to the new architecture, treating `analysis.json` + `plan.md` + `change-log.md` + `iterations.md` as first-class context carriers.** This is the load-bearing design choice for making it work. If those files become sparse or JSON-only status markers, the context-loss concern becomes real. If they're rich prose handoffs with reasoning, users won't notice the loss.
+
+**Who this choice serves:**
+
+- **App developers + PMs** fine-tuning small LLMs for their products → primary target, served well.
+- **ML researchers** doing GRPO exploration → secondary, acknowledged gap; power-user flags mitigate.
+- **CI / automation users** → primary target, served much better than old architecture.
+- **Multi-host users** (OpenClaw, OpenCode) → only served by new architecture.
+
+### 14.8 Success signals for the mitigations
+
+We'll know the mitigations are working if:
+
+- Users complete end-to-end runs without asking *"why did it pick this?"* questions the pipeline itself couldn't answer by reading artifacts.
+- Workers spawned mid-pipeline cite specific prior-phase decisions by name (*"raising tpFloor to 0.22 as noted in change-log.md round 2"*), not generic ML reasoning.
+- Users who inspect `analysis.json` find it useful, not just a debug dump.
+- Bugs are reproduced by replaying artifacts, not by replaying chat transcripts.
+
+We'll know they're failing if:
+
+- `analysis.json` becomes write-only; workers ignore it.
+- Each worker re-derives reasoning from scratch, inconsistently.
+- Bug reports say *"I don't know why the pipeline did X"* — the artifacts don't explain it.
+- Users ask for "a mode like the old SKILL.md" as a feature request.
+
+### 14.9 Can rich handoffs match monolithic context?
+
+The natural follow-up question: *if we feed each spawned `claude -p` worker the full history of prior decisions, can it match what the monolithic agent had in its head?*
+
+**Short answer: ~90% yes. ~10% gap is real but bounded.**
+
+#### What serializes losslessly (the 90%)
+
+If handoff artifacts are prose-rich, every *named decision* carries over:
+
+| Old agent had in-context | New worker gets from artifact |
+|---|---|
+| "Picked label-set template because trace analysis showed fixed vocab" | `analysis.json.plan.grader_template_rationale` |
+| "Raised tpFloor to 0.22 because iter-1 had 78% zero-variance" | `change-log.md` entry v2→v3 |
+| "Topic 'cancel-pending-order' is narrow; risk of collapse" | `plan.md` risk flags section |
+| "User edited topics.json after plan to split 'refunds' topic" | journal + `topics.json` diff |
+| "Eval iter 2 failed because trivial% too high" | `analysis.json.eval.iterations[1].root_cause` |
+| "We already tried lowering max_turns; didn't help" | `iterations.md` |
+
+Every technical sub-task (extract PDF, build topic hierarchy, refine grader from eval scores) has enough formal structure to serialize cleanly.
+
+#### What doesn't serialize (the 10%)
+
+Genuinely hard to capture:
+
+1. **Tacit reasoning** — agent noticed "this topic description feels brittle" without writing it down.
+2. **Cross-referential noticing** — emergent "wait, step 2 connects to this failure pattern" realizations don't happen across siloed workers.
+3. **User state / mood** — tone, impatience, confidence — lost in subprocess boundaries.
+4. **Conversational nuance** — "eh, up to you" vs "please do this" — flattened in serialized instructions.
+5. **Internal monologue scaffolding** — old agent's "if X then Y otherwise Z" condensed into a final decision; reasoning chain not preserved.
+
+#### The compensating advantage
+
+Each `claude -p` worker has a **focused prompt**. The old agent sometimes carries too much context and gets distracted by 40 messages of unrelated history. Workers are laser-focused on the current step. For formal sub-tasks, **focus beats accumulated context**.
+
+#### The real cost: tokens
+
+| | Monolithic SKILL.md | New approach (naïve) | New approach (with prompt caching) |
+|---|---|---|---|
+| Total prompt tokens per pipeline run | ~100–200K | ~500–800K | ~150–250K |
+
+Without prompt caching, new approach is 4–5× more expensive. With automatic prefix caching (the shared prefix — objective, pipeline-context skill, accumulated handoff — cached across sequential `claude -p` invocations), per-worker effective cost drops sharply. **Prompt caching is load-bearing** — §11 Q11 tracks verification.
+
+#### The practical test: run-replay
+
+Concrete contract test to verify artifacts preserve capability:
+
+1. Take a completed pipeline run produced by the old monolithic SKILL.md.
+2. From that run's raw state, generate the artifacts the new approach would produce (`analysis.json`, `plan.md`, `change-log.md`, `iterations.md`, …).
+3. For each pipeline step, hand those artifacts + the step's task to a fresh `claude -p` worker.
+4. Record the worker's decision at each step.
+5. Compare against the old agent's decision.
+
+If worker decisions match on ≥90% of steps, the context-carrier pattern works. If worker frequently asks *"why did we pick X?"* or makes different choices, artifacts are too sparse and need richer reasoning capture.
+
+**This should be a contract test in CI** — catches regressions when someone writes a lazy JSON-only artifact that drops reasoning.
+
+#### Five conditions for the new approach to match the old
+
+1. **Artifacts are prose-rich, not JSON-sparse.** Enforced by §9 invariant.
+2. **Rejected alternatives + known risks + user overrides are captured**, not just final decisions.
+3. **Prompt caching verified and enabled** — without it, cost is 4–5× higher (§11 Q11).
+4. **Workers include upstream artifacts in system prompts**, not just task-specific inputs.
+5. **Run-replay contract tests** verify reproducibility — given artifacts, workers make consistent decisions (§11 Q12).
+
+When all five hold: the new approach matches the old on technical capability, exceeds it on auditability, and loses only the exploratory / conversational ~10% that matters for ML researchers but not for our target users.
+
+#### Practical guidance for implementers
+
+When writing code that produces an artifact, ask: *"if a fresh Claude worker has only this file + my objective + the next task, can it make the same decision I'm about to make?"* If no, the artifact is missing reasoning. Common omissions:
+
+- Decisions recorded as outcomes, not as rationale ("picked label-set" vs "picked label-set *because X*").
+- Rejected alternatives not noted ("*tried rank template first; rejected because ordered scoring doesn't fit multi-label task*").
+- Edge-case flags not captured ("topic `cancel-pending-order` has 3× prior observations from traces — risk of over-representation in training data").
+- User overrides recorded without reasoning ("user edited topics.json" without *what they changed and why we think they changed it*).
+
+Getting artifact richness right is the single biggest determinant of whether the new architecture feels as capable as the old.
+
+### 14.10 Why the hybrid model closes every gap
+
+§14.9 shows rich handoffs close the **context-loss** gap (~90%). But they don't close the **orchestration-shape** gap — some needs (exploratory dialogue, expert deep iteration) are fundamentally about dialogue structure, not context capacity.
+
+**The hybrid model (§2.3) solves both** by offering two plugin modes over the same CLI:
+
+```
+                    ┌──────────────────────────────────────────────┐
+                    │  /finetune           (ORCHESTRATOR, thick)   │
+                    │  ─ holds context across phases               │  ← closes
+                    │  ─ agent loop inside Claude Code session     │    orchestration-
+                    │  ─ dialogues with user                       │    shape gap
+                    │  ─ reasons across steps                      │
+                    │  ─ reads + writes artifacts as it goes       │
+                    └─────────────────────┬────────────────────────┘
+                                          │  calls via Bash
+                                          ▼
+                    ┌──────────────────────────────────────────────┐
+                    │  /finetune-<verb>    (THIN wrappers)         │
+                    │  ─ one slash command per pipeline phase      │  ← closes
+                    │  ─ reads journal for state                   │    context-loss
+                    │  ─ shells out to CLI verb                    │    gap via
+                    │  ─ rich artifacts carry reasoning forward    │    artifacts
+                    └─────────────────────┬────────────────────────┘
+                                          │  shells out
+                                          ▼
+                    ┌──────────────────────────────────────────────┐
+                    │  vllora finetune <verb>       (CLI)          │
+                    │  ─ pipeline logic + state + workers          │  ← portable,
+                    │  ─ also used directly from terminal / CI     │    testable,
+                    │                                              │    multi-host
+                    └──────────────────────────────────────────────┘
+```
+
+#### Gap-by-gap accounting
+
+| Gap from §14.3 | How hybrid closes it |
+|---|---|
+| Cross-step implicit reasoning | Orchestrator is a continuous agent — same in-context reasoning the old SKILL.md had. Thin mode mitigates via artifacts (~70%); orchestrator restores the full 100% when a user chooses it. |
+| Exploratory ML research | Orchestrator natively supports the "try variant → observe → discuss → iterate" loop. User types `/finetune` once, stays in one conversation, iterates rapidly. |
+| Expert deep dives | Same as above. Experts never hit the subprocess boundary unless they want to. |
+| Rich mid-pipeline dialogue | Orchestrator *is* the dialogue. It pauses between phases, asks questions, responds to user steering, all within one Claude Code conversation. |
+
+#### What we do NOT give up by adding the orchestrator
+
+- **CI + automation** — untouched. `vllora finetune <verb>` works standalone; orchestrator is plugin-layer only.
+- **Multi-host portability** — untouched. Thin commands + CLI still port to OpenClaw, OpenCode, Cline, etc. Orchestrator is Claude-Code-exclusive, which is fine: each host can have its own orchestrator or just use thin commands.
+- **Testability** — unchanged. Pipeline logic lives in CLI; orchestrator only coordinates. LLM-driven parts (workers, orchestrator) get scenario evals, not unit tests. That was already the plan.
+- **Determinism for skilled users** — they can still use thin verbs directly. The orchestrator doesn't force itself on anyone.
+
+#### Costs we accept
+
+1. **Context window under long orchestrator runs.** Mitigation: orchestrator delegates heavy-context work (PDF extraction, record generation) to CLI-spawned workers that have their own fresh context windows. Orchestrator sees summaries only.
+2. **Higher token cost for orchestrator users.** Acceptable — they're choosing capability. Thin-mode users still get cheap runs. CI gets the cheapest.
+3. **Two plugin modes to maintain.** Shared CLI beneath keeps duplication small — only the markdown files diverge. No logic duplicated.
+4. **LLM-driven orchestration resists contract testing.** Compensated by scenario-based evals (*"given state X, did orchestrator pick reasonable next action?"*). Standard agent-testing practice.
+
+#### Per-command defaults
+
+| Use case | Default command | Why |
+|---|---|---|
+| First-time user, unclear what to do | `/finetune` orchestrator | Wizard-quality guided experience |
+| User says *"I want to fine-tune a model from these PDFs"* | `/finetune` orchestrator | Natural-language entry |
+| User types an explicit phase name | `/finetune-<verb>` thin | Respect user intent |
+| User runs `vllora finetune …` from terminal | CLI direct | They chose terminal surface |
+| CI workflow file | CLI `auto` or explicit verb chain | Non-interactive |
+
+#### The net result
+
+**Zero gaps vs monolithic SKILL.md** across §14.3. Hybrid matches or beats old approach on every dimension while inheriting the architectural gains (testability, portability, CI support, multi-host). The only real cost is maintenance of two plugin-level modes, which is negligible compared to the unified CLI beneath.
+
+**This is the architecture.** §2.3 is authoritative.
