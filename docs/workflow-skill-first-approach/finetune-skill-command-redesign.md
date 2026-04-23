@@ -362,7 +362,20 @@ Machine / install ops — one surface (terminal only).
 
 ### 2.10 Authentication
 
-One setup for all LLM-backed commands, inherited by every `claude -p` subprocess:
+#### Complete auth surface
+
+| Requirement | Why | How to configure |
+|---|---|---|
+| **Claude** (required for every LLM-backed verb) | All LLM work — record generation, trace analysis, topic derivation, grader drafting, training monitoring — runs through `claude -p` worker subprocesses. | `claude login` (subscription — recommended, no extra cost) **OR** `export ANTHROPIC_API_KEY=sk-ant-...` (CI / scripted) |
+| **Remote source URIs** (optional — only if using `hf://` / `s3://` / `gs://` / `azblob://` URIs) | `sources` and `import-dataset` download from external storage | Provider env vars: `HF_TOKEN`, `AWS_ACCESS_KEY_ID`+`AWS_SECRET_ACCESS_KEY`, `GOOGLE_APPLICATION_CREDENTIALS`, `AZURE_STORAGE_CONNECTION_STRING`. See §4.6. |
+
+#### What you do NOT need to configure
+
+- **No OpenAI API key.** Record generation uses Claude, not GPT. See §6.5.4 direct-generation mode.
+- **No Google / Mistral / Cohere / any other LLM provider.** All pipeline LLM work is Claude-only.
+- **No gateway-level provider credentials.** The gateway runs local Qwen models for eval + training; no external LLM routing required in the default path.
+
+The one-time setup is just:
 
 ```bash
 claude login                         # subscription users (recommended — no extra cost)
@@ -370,11 +383,47 @@ claude login                         # subscription users (recommended — no ex
 export ANTHROPIC_API_KEY=sk-ant-...  # CI / scripted users
 ```
 
-Precedence: `ANTHROPIC_API_KEY` > `apiKeyHelper` > `CLAUDE_CODE_OAUTH_TOKEN` > `claude login` subscription.
+`claude -p` precedence: `ANTHROPIC_API_KEY` > `apiKeyHelper` > `CLAUDE_CODE_OAUTH_TOKEN` > `claude login` subscription.
 
-For external source URIs (hf://, s3://, gs://, ...), use provider-standard env vars (`HF_TOKEN`, `AWS_ACCESS_KEY_ID`, `GOOGLE_APPLICATION_CREDENTIALS`, ...). See §4.6.
+`vllora doctor` reports what's configured and flags missing pieces.
 
-`vllora doctor` reports what's configured.
+#### 2.10.1 ToS compliance — the `claude -p` subprocess pattern
+
+**The `claude -p` subprocess pattern is Anthropic's documented use for CI/scripts** (ref: [CLAUDE_CODE_OAUTH_TOKEN docs](https://code.claude.com/docs/en/authentication)). vllora spawning the `claude` binary from Python is the same shape as a Makefile, GitHub Action, or shell script invoking it — the pattern `setup-token` was explicitly designed for.
+
+**What the Jan–Feb 2026 Anthropic ban wave actually targeted:** third-party harnesses that **extract OAuth tokens and call the Messages API directly**, bypassing the Claude Code binary entirely. Examples: OpenClaw, OpenCode, Cline, raw Agent SDK wrappers reading `~/.claude/.credentials.json`. The distinguishing feature was *Claude binary bypassed → token arbitrage*.
+
+vllora's pattern is distinct:
+
+```
+ ✓ ALLOWED (our pattern)                 ✗ BANNED (what got harnesses cut off)
+ ──────────────────────                   ────────────────────────────────────
+
+ vllora (Python)                          third-party harness
+    │  subprocess.run(                       │  reads ~/.claude/.credentials.json
+    │    ["claude", "-p", ...])              │  calls anthropic.messages.create(…)
+    ▼                                        ▼
+ claude binary                            api.anthropic.com (directly)
+    │  (Claude Code is the client             (Claude binary bypassed)
+    │   Anthropic sees)
+    ▼
+ api.anthropic.com
+```
+
+**Red lines vllora will not cross** (codified as §9 invariants):
+
+- Never read `~/.claude/.credentials.json` or OS keychain for tokens.
+- Never use subscription credentials with `@anthropic-ai/sdk` or raw Messages API calls.
+- Never run as a multi-user hosted service dispatching workers on behalf of other users.
+
+#### 2.10.2 Rate-limit reality
+
+Anthropic enforces weekly Sonnet/Opus caps on Claude Pro ($20) and Max ($100/$200) since July 2025. A typical vllora run spawns ~20–30 `claude -p` workers, each with max-turns 10–50. Heavy users running multiple full pipelines per week can hit Pro's weekly ceiling.
+
+- **Throttling ≠ banning.** Hitting the cap causes temporary rate-limit responses, not account action.
+- **Cumulative token tracking** (future, §11 Q9) — `/finetune-status` to surface weekly usage estimate so users can pace pipelines.
+- **Pro vs Max advice** — heavy users should consider Max or fall back to `ANTHROPIC_API_KEY` (metered API billing) for unrestricted throughput.
+- **CI-friendly path** — `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`) gives one-year headless credentials designed for exactly this pattern.
 
 > **Doc consistency:** §3–§12 describe Layer A verbs (`sources`, `plan`, `generate`, `eval`, `train`, …) as the user-facing surface. Where they say "CLI runs X," read it as "Layer A verb runs, which internally invokes Layer B operations per §2.6." Plugin slash commands always map to Layer A verbs.
 
@@ -2728,6 +2777,14 @@ Workers should:
 | Output JSON | `{ "topic_slug": "...", "records": [...], "rejected": [{"reason", "candidate"}] }` |
 | Writes | appends to `training.jsonl` (via return path — not direct file write) |
 
+**Direct-generation mode (default).** Training records are produced by the worker's own Claude reasoning, not by a separate teacher-model call routed through the gateway. The worker reads the topic + knowledge + objective, thinks through multiple prompt types within its agent loop (max-turns=10 is enough for 5+ diverse styles), and emits records directly.
+
+**This means the `generate` phase requires ZERO external LLM API keys beyond Claude auth.** No `OPENAI_API_KEY`, no teacher-model config, no gateway-level provider credentials. Just `claude login` or `ANTHROPIC_API_KEY` — the same auth the rest of the pipeline already uses.
+
+**Deferred: `--teacher-model` flag.** For advanced users who want records generated by a different LLM family (e.g., GPT-4o-mini for cost optimization, or a local model via the gateway for fully offline operation), a future `vllora finetune generate --teacher-model <name>` flag routes record generation through the gateway. Not v0.
+
+**Diversity note.** Today's `generate_records.py` makes 5 separate LLM calls per topic for prompt-type diversity (fact-recall / multi-step / evol-instruct / etc.). In the new design, the `record_generator` worker produces all prompt types within a single agent loop — max-turns=10 gives budget for 5–7 distinct styles + validation passes. Same diversity, one subprocess per topic.
+
 #### 6.5.5 `grader_drafter`
 
 Three modes — see §5.9 for the lifecycle.
@@ -3164,6 +3221,9 @@ finetune-project/                    # see §4.1 for full tree
 - **Same verb, same behavior.** `vllora finetune eval` and `/finetune-eval` produce identical artifacts.
 - **Plugin has no pipeline logic.** No Python in plugin files; no direct gateway calls; no file writes outside what a CLI call triggers. Applies to both thin verb commands (which only narrate) and the orchestrator (which reasons + dialogues but always calls CLI for pipeline work).
 - **CLI inherits auth.** `claude -p` uses whatever `claude login` or `ANTHROPIC_API_KEY` has configured. No separate key management in `vllora`.
+- **Claude is the only LLM dependency.** No other LLM provider (OpenAI, Google, Mistral, etc.) is required for any pipeline phase. Record generation, trace analysis, topic derivation, grader drafting, and training monitoring all run through Claude workers. Eval and training use local Qwen models via the gateway. `vllora doctor` reports zero missing LLM auth beyond Claude in the default configuration.
+- **vllora never reads credential files directly.** Only `claude -p` resolves auth; vllora treats Anthropic credentials as opaque. The CLI inherits the Claude binary's own token handling via subprocess env. This keeps vllora on the intended-use side of Anthropic's ToS (ref §2.10.1) and distinguishes us from banned third-party harnesses that extract OAuth tokens to bypass the Claude Code binary.
+- **Strictly single-user, local-execution.** vllora runs on the user's own machine, using the user's own auth. Never a multi-user hosted service dispatching Claude work for other users — that pattern is account sharing/reselling regardless of whether the Claude binary is in the middle. Enforced by pip-only distribution (§3) and the no-REST-API non-goal (§12).
 - **Slug IDs local, UUIDs at boundary.** Local files use slugs; gateway assigns UUIDs on upload. `reconcile-topics` keeps them mapped.
 - **UI is read-only.** React FE queries gateway. Never mutates pipeline state.
 - **Single authoritative source per artifact.** See §4 storage principle. Files and DB never both claim ownership. The "authoritative source" column is the contract.

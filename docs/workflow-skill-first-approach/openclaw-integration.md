@@ -24,6 +24,37 @@ Zero pipeline logic lives in any plugin. Rewriting for a new host is mechanical 
 
 **Note on the orchestrator command** (`/finetune` in the Claude Code plugin, per parent §2.3.1): that's a Claude-Code-specific thick-agent pattern and does **not** port to OpenClaw. OpenClaw has its own agent model and can host its own equivalent orchestrator if desired — but it's a separate design problem, not a port. The thin verbs + CLI always port; the orchestrator is bonus per host.
 
+### 1.1 Auth note — OpenClaw and Claude subscriptions
+
+As of early 2026, **Anthropic cut off the ability to use Claude Pro/Max subscriptions as OpenClaw's backend LLM.** OpenClaw was one of the tools identified as a "third-party harness bypassing Claude Code" and lost subscription-auth access for its own LLM calls (it can still use `ANTHROPIC_API_KEY` or other providers).
+
+**This does not affect our integration.** The vllora CLI's `claude -p` workers are completely independent of OpenClaw's backend LLM:
+
+```
+ [OpenClaw chat]          (OpenClaw's own LLM — GPT-4, local model, etc.)
+      │
+      │  runs skill → spawns subprocess
+      ▼
+ [vllora CLI]             (Python process, separate from OpenClaw)
+      │
+      │  spawns workers
+      ▼
+ [claude -p]              (Anthropic's binary, inherits user's claude login OR
+                           ANTHROPIC_API_KEY — same rules as any other caller
+                           of claude -p; vllora's pattern is ToS-compliant per
+                           parent doc §2.10.1)
+```
+
+Two separate auth paths:
+- **OpenClaw's own LLM** — configured by OpenClaw user (post-2026 crackdown, this is NOT Claude subscription; likely GPT-4, local model, or `ANTHROPIC_API_KEY` API billing).
+- **vllora workers' LLM** — always `claude -p`, inherits user's independent Claude auth (subscription OK for this path because vllora is a documented subprocess caller, not a harness replacing Claude Code).
+
+Users need both configured for the OpenClaw × vllora combo to work:
+1. OpenClaw-level auth (for its own agent reasoning)
+2. Claude auth (`claude login` or `ANTHROPIC_API_KEY`) that `claude -p` inherits when vllora spawns it
+
+`vllora doctor` validates (2); OpenClaw's install flow validates (1).
+
 ---
 
 ## 2. What stays the same across hosts
