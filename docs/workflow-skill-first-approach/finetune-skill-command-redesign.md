@@ -4,13 +4,32 @@
 **Author:** Claude + @duonganhthu43.
 **Date:** 2026-04-22.
 
-Spec for the `vllora-finetune` Claude Code plugin and its backing CLI. This document describes *what gets built*.
+Spec for the `vllora-finetune` Claude Code plugin and its backing CLI. This document describes *what gets built* and *why*.
+
+## Related docs
+
+| Doc | Purpose |
+|---|---|
+| **[implementation-plan.md](./implementation-plan.md)** | Cross-feature coordination: track assignments (A/B/C), milestones, interface contracts between tracks. |
+| **[openclaw-integration.md](./openclaw-integration.md)** | v2 roadmap for OpenClaw-host plugin wrapping the same CLI. |
+| **spec-kit repo: `finetune-workflow-speckit/`** | Per-feature specs (001–006) with acceptance criteria, FRs, data models, task breakdowns. See `.specify/memory/constitution.md` for project principles (informs §9 invariants below). |
+
+**Feature mapping:**
+
+| Feature | spec-kit dir | Track | What |
+|---|---|---|---|
+| 001 | `specs/001-job-based-cli-api/` | A | Gateway job API + Layer B catalog (§2.4) |
+| 002 | `specs/002-state-and-gateway-client/` | A | Python state helpers (§4.7) + typed gateway client |
+| 003 | `specs/003-cli-pipeline-verbs/` | B | Pipeline verbs (§5) + workers (§6.5) + URI adapters (§4.5) |
+| 004 | `specs/004-claude-code-plugin/` | C | Plugin bundle (§7) — orchestrator + thin commands + skills |
+| 005 | `specs/005-install-flow/` | C | `vllora init/doctor/uninstall` (§10) |
+| 006 | `specs/006-ui-analysis-integration/` | C | React UI consumers of `analysis.json` + grader diffs + training metrics |
 
 ---
 
 ## 1. Overview
 
-`vllora` is a local fine-tuning platform. Users fine-tune small LLMs (Qwen 3.5 0.8B / 2B / 4B) from **PDFs**, **OTel traces**, or **pre-built datasets**. Training uses **GRPO** (reinforcement learning), so the pipeline includes grader authoring — not just dataset prep.
+`vllora` is a local fine-tuning platform. Users fine-tune small LLMs (Qwen 3.5 0.8B / 2B / 4B) from **PDFs**, **OTel traces**, or **pre-built records**. Training uses **GRPO** (reinforcement learning), so the pipeline includes grader authoring — not just training-data prep.
 
 ### 1.1 The whole system
 
@@ -194,7 +213,7 @@ Plugin commands shell out to Layer A. Layer A internally calls Layer B. Layer B 
   Claude Code chat          Terminal CLI (Layer A)        Terminal CLI (Layer B)
   ─────────────────         ──────────────────────        ──────────────────────
   /finetune-sources   ──▶   vllora finetune sources  ──▶  vllora finetune knowledge add
-                                                          vllora finetune dataset generate
+                                                          vllora finetune records generate
                                                            (Layer A composes one or more B ops)
 ```
 
@@ -234,7 +253,7 @@ One slash command per pipeline phase. Each is a thin narrator that shells out to
 | `/finetune-quickstart` | `vllora finetune quickstart` | `vft quickstart` | Guided first-run wizard; chains init→sources with defaults | 2 min | `WIZARD → LLM` |
 | `/finetune-init` | `vllora finetune init <obj>` | `vft init <obj>` | Scaffold `finetune-project/`, create gateway workflow | <10s | `DET` |
 | `/finetune-sources` | `vllora finetune sources <paths/URIs>` | `vft sources …` | Ingest PDFs / OTel traces from local paths or remote URIs | 1–30 min | `LLM` |
-| `/finetune-import-dataset` | `vllora finetune import-dataset <path/URI>` | `vft import-dataset …` | Alternative to sources+plan+generate: import pre-built dataset | 1–10 min | `DET` |
+| `/finetune-import-records` | `vllora finetune import-records <path/URI>` | `vft import-records …` | Alternative to sources+plan+generate: import pre-built records | 1–10 min | `DET` |
 | `/finetune-plan` | `vllora finetune plan` | `vft plan` | Build topic hierarchy + relations + grader draft; emit `plan.md` | 1–3 min | `LLM` |
 | `/finetune-generate` | `vllora finetune generate` | `vft generate` | Generate training records, finalize grader, validate, quality-gate | 3–10 min | `MIXED` |
 | `/finetune-eval` | `vllora finetune eval` | `vft eval` | Dry-run on 4B + 0.8B; readiness gate; re-run to iterate | 5–15 min/iter | `DET+COMPUTE` (on FAIL → `LLM`) |
@@ -279,8 +298,8 @@ Output: `state`, timestamps, progress, terminal outcome (when available). Source
 | Command | Purpose | Duration | Kind |
 |---|---|---|---|
 | `vllora finetune knowledge add` | Ingest knowledge sources into the workflow | 1–30 min | `LLM` |
-| `vllora finetune dataset import` | Import pre-built dataset into workflow records | 1–10 min | `DET` |
-| `vllora finetune dataset generate` | Generate training records from workflow knowledge + topics | 3–10 min | `LLM` |
+| `vllora finetune records import` | Import pre-built records into the workflow | 1–10 min | `DET` |
+| `vllora finetune records generate` | Generate training records from workflow knowledge + topics | 3–10 min | `LLM` |
 | `vllora finetune grader import` | Import an externally-authored grader.js | <1 min | `DET` |
 | `vllora finetune grader generate` | Generate or revise grader (init / finalize / refine mode) | 1–5 min | `LLM` |
 | `vllora finetune grader dryrun` | Dry-run grader on sample records for validation | 1–5 min | `DET` |
@@ -325,9 +344,9 @@ Each Layer A pipeline verb composes one or more Layer B operations plus determin
 |---|---|
 | `init` | (no Layer B call) — creates workflow via `POST /workflows` directly |
 | `sources` | `knowledge add` (one job per batch of sources) |
-| `import-dataset` | `dataset import` |
-| `plan` | `dataset generate --only-tracking` (topics/relations sub-op) + `grader generate` (init mode) |
-| `generate` | `dataset generate` (records sub-op) + `grader generate` (finalize mode) + `grader dryrun` |
+| `import-records` | `records import` |
+| `plan` | `records generate --only-tracking` (topics/relations sub-op) + `grader generate` (init mode) |
+| `generate` | `records generate` (records sub-op) + `grader generate` (finalize mode) + `grader dryrun` |
 | `eval` | `eval run`; on FAIL-with-grader-issue, also `grader generate` (refine mode) |
 | `train` | `train run` |
 | `status` | `jobs status` for the most recent job per domain, merged with journal state |
@@ -367,7 +386,7 @@ Machine / install ops — one surface (terminal only).
 | Requirement | Why | How to configure |
 |---|---|---|
 | **Claude** (required for every LLM-backed verb) | All LLM work — record generation, trace analysis, topic derivation, grader drafting, training monitoring — runs through `claude -p` worker subprocesses. | `claude login` (subscription — recommended, no extra cost) **OR** `export ANTHROPIC_API_KEY=sk-ant-...` (CI / scripted) |
-| **Remote source URIs** (optional — only if using `hf://` / `s3://` / `gs://` / `azblob://` URIs) | `sources` and `import-dataset` download from external storage | Provider env vars: `HF_TOKEN`, `AWS_ACCESS_KEY_ID`+`AWS_SECRET_ACCESS_KEY`, `GOOGLE_APPLICATION_CREDENTIALS`, `AZURE_STORAGE_CONNECTION_STRING`. See §4.6. |
+| **Remote source URIs** (optional — only if using `hf://` / `s3://` / `gs://` / `azblob://` URIs) | `sources` and `import-records` download from external storage | Provider env vars: `HF_TOKEN`, `AWS_ACCESS_KEY_ID`+`AWS_SECRET_ACCESS_KEY`, `GOOGLE_APPLICATION_CREDENTIALS`, `AZURE_STORAGE_CONNECTION_STRING`. See §4.6. |
 
 #### What you do NOT need to configure
 
@@ -454,9 +473,9 @@ Every command is classified by how it executes. This affects testing strategy, c
 | Kind | Commands |
 |---|---|
 | `PURE` | Layer A: `status`. Layer B: `jobs status`. Lifecycle: `version`, `doctor` (mostly). |
-| `DET` | Layer A: `init`, `import-dataset`. Layer B: `dataset import`, `grader import`, `grader dryrun`, `eval stop`, `train stop`. Lifecycle: all. Utilities: `cancel-*`, `log-step`, `update-analysis`, `validate`, `reconcile-topics`, `grader-sanity-check`, `diagnose-clipping`, `dry-run-grader`, `topics *`, `export`. |
+| `DET` | Layer A: `init`, `import-records`. Layer B: `records import`, `grader import`, `grader dryrun`, `eval stop`, `train stop`. Lifecycle: all. Utilities: `cancel-*`, `log-step`, `update-analysis`, `validate`, `reconcile-topics`, `grader-sanity-check`, `diagnose-clipping`, `dry-run-grader`, `topics *`, `export`. |
 | `DET+COMPUTE` | Layer A: `eval` (base path), parts of `train`. Layer B: `eval run`, `train run`. Utilities: `probe-difficulty`. |
-| `LLM` | Layer A: `sources`, `plan`. Layer B: `knowledge add`, `dataset generate`, `grader generate`. Long-running LLM worker within `train`: `training_monitor`. |
+| `LLM` | Layer A: `sources`, `plan`. Layer B: `knowledge add`, `records generate`, `grader generate`. Long-running LLM worker within `train`: `training_monitor`. |
 | `MIXED` | Layer A: `generate` (LLM workers + deterministic scripts + gate), `train` (deterministic orchestration + `training_monitor` LLM worker), `eval` when grader refinement triggers. |
 | `WIZARD` | Layer A: `quickstart`. |
 
@@ -620,15 +639,15 @@ Same pipeline outcome; user drives each phase explicitly. Preferred when user wa
    🎉 adapter ready
 ```
 
-#### 2.12.3 Alternative entry: pre-built dataset
+#### 2.12.3 Alternative entry: pre-built records
 
 ```
-  USER   ▸  "I already have a training dataset on HuggingFace."
+  USER   ▸  "I already have a training record set on HuggingFace."
   AGENT  ▸  [runs /finetune-init]
-            [runs /finetune-import-dataset hf://org/my-dataset]
+            [runs /finetune-import-records hf://org/my-dataset]
                         │
                         ▼
-             (skips sources + plan + generate — dataset already exists)
+             (skips sources + plan + generate — records already exist)
                         │
                         ▼
             /finetune-eval  →  /finetune-train   (same as happy path)
@@ -809,8 +828,8 @@ Six roles participate in the flow. Understanding who does what makes the diagram
 | **USER** | Types commands in chat or terminal. Reviews `plan.md`, decides when to proceed. | — |
 | **ORCHESTRATOR** | (Optional, plugin-only) Thick Claude Code agent driven by `/finetune`. Holds pipeline context across phases, dialogues with user, calls CLI via Bash. Only present when user chose orchestrator mode (§2.3.1). | `~/.claude/plugins/vllora-finetune/commands/finetune.md` |
 | **PLUGIN (thin)** | Thin narrators per phase. Each `/finetune-<verb>` reads a `.md` file, shells out to one CLI verb, pipes stdout back. | `~/.claude/plugins/vllora-finetune/commands/finetune-<verb>.md` |
-| **CLI** | Python process. Coordinates workers + scripts + gateway. Writes local files, uploads to DB. | `vllora/cli/finetune/` |
-| **WORKERS** | `claude -p` subprocesses for LLM-heavy work. Inherit user's auth. | Spawned by CLI; prompts in `vllora/cli/finetune/prompts/` |
+| **CLI** | Rust binary (`vllora`). Coordinates workers + scripts + gateway. Writes local files, uploads to DB. | `vllora/gateway/src/cli/commands/finetune/` (verb handlers) |
+| **WORKERS** | `claude -p` subprocesses for LLM-heavy work. Inherit user's auth. | Spawned by CLI; workers in `vllora/gateway/src/cli/commands/finetune/workers/`; prompts in `vllora/finetune/src/prompts/` |
 | **GATEWAY+DB** | Rust HTTP server @ `:9090` + SQLite at `~/.vllora/vllora.db`. Runs model inference for eval + GRPO training. | `~/.vllora/bin/vllora-gateway` |
 | **UI** | React app @ `:5173`. Read-only view. Polls gateway for updates. | `vllora ui start` |
 
@@ -821,7 +840,7 @@ Six roles participate in the flow. Understanding who does what makes the diagram
 Three entry commands, two pipeline paths.
 
 ```
-                (User has PDFs / traces / task / pre-built dataset)
+                (User has PDFs / traces / task / pre-built records)
                                         │
                            ┌────────────┼────────────┐
                            ▼            ▼            ▼
@@ -844,7 +863,7 @@ Three entry commands, two pipeline paths.
                        ▼                                    ▼
               ┌────────────────┐                  ┌────────────────────┐
               │ /finetune-     │                  │ /finetune-         │
-              │   sources      │                  │   import-dataset   │
+              │   sources      │                  │   import-records   │
               │ (PDFs/traces)  │                  │ (skips plan+gen)   │
               └────────┬───────┘                  └─────────┬──────────┘
                        ▼                                    │
@@ -1089,27 +1108,27 @@ Detailed steps:
 
 ---
 
-#### PHASE 2' — Import-dataset (alternative to phases 2–4)
+#### PHASE 2' — Import-records (alternative to phases 2–4)
 
 Workflow:
 
 ```
-   [USER]  /finetune-import-dataset hf://org/my-dataset
+   [USER]  /finetune-import-records hf://org/my-dataset
       │
       ▼
-   [PLUGIN]  shells out  ───▶  [CLI]  vllora finetune import-dataset ...
+   [PLUGIN]  shells out  ───▶  [CLI]  vllora finetune import-records ...
                                   │
                                   ├─  URI adapter resolves  →  local .jsonl / .parquet
                                   │
                                   ├─  auto-detect schema (openai-chat | custom)
                                   │
-                                  ├─  validate_dataset.py       (deterministic)
+                                  ├─  validate_records.py       (deterministic)
                                   │
                                   ├─  write training.jsonl (with per-record origin_uri)
                                   │
                                   ├─  POST /records  ──▶  [GATEWAY]
                                   │                         INSERT records
-                                  │                         (origin_uri, origin_dataset_id)
+                                  │                         (origin_uri, origin_source_id)
                                   │
                                   ├─  journal:
                                   │     plan     = skipped (reason: imported)
@@ -1124,13 +1143,13 @@ Workflow:
 Detailed steps:
 
 ```
- (1) [USER]     types:                 /finetune-import-dataset hf://org/my-dataset
- (2) [PLUGIN]   shells out            → [CLI] vllora finetune import-dataset hf://...
+ (1) [USER]     types:                 /finetune-import-records hf://org/my-dataset
+ (2) [PLUGIN]   shells out            → [CLI] vllora finetune import-records hf://...
  (3) [CLI]      URI adapter resolves   → local .jsonl / .parquet
  (4) [CLI]      auto-detects schema (openai-chat | custom)
- (5) [CLI]      runs validate_dataset.py (deterministic)
+ (5) [CLI]      runs validate_records.py (deterministic)
  (6) [CLI]      writes training.jsonl (with per-record origin_uri)
- (7) [CLI]      POSTs records          → [GATEWAY]  INSERT records (origin_uri, origin_dataset_id)
+ (7) [CLI]      POSTs records          → [GATEWAY]  INSERT records (origin_uri, origin_source_id)
  (8) [CLI]      journal: plan=skipped, generate=done (imported)
  (9) [CLI]      prints "Imported N records. Next: /finetune-eval"          → [PLUGIN] → [USER]
                                                                  → jumps to PHASE 5
@@ -1228,7 +1247,7 @@ Workflow:
                                   │                    writes quality-checker/grader.js,
                                   │                      quality-checker/change-log.md
                                   │
-                                  ├─  validate_dataset.py     (deterministic)
+                                  ├─  validate_records.py     (deterministic)
                                   ├─  data_quality_gate.py    (deterministic)
                                   │
                                   └─  branch on gate result:
@@ -1276,7 +1295,7 @@ Detailed steps:
                                             dry-run → adjust → dry-run → verify
                                           writes quality-checker/grader.js,
                                                  quality-checker/change-log.md
- (8) [CLI]      runs validate_dataset.py          (deterministic)
+ (8) [CLI]      runs validate_records.py          (deterministic)
  (9) [CLI]      runs data_quality_gate.py         (deterministic)
 (10) [CLI]      IF quality_gate=FAIL:
                   journal: generate=done (quality_gate=fail)
@@ -1531,7 +1550,7 @@ Detailed steps:
 | 0. install | [USER] (`vllora init`) | [CLI] | `~/.vllora/` | — |
 | 1. init | [USER] (`/finetune-init`) | [CLI] | config, journal | workflows |
 | 2. sources | [USER] (`/finetune-sources`) | [WORKERS] + [CLI] | knowledge/, trace-analysis/ | source_documents, otel_traces, knowledge_parts |
-| 2'. import | [USER] (`/finetune-import-dataset`) | [CLI] | training.jsonl | records |
+| 2'. import | [USER] (`/finetune-import-records`) | [CLI] | training.jsonl | records |
 | 3. plan | [USER] (`/finetune-plan`) | [WORKERS] + [CLI] | topics, relations, plan.md, grader-draft | topics, relations |
 | 4. generate | [USER] (`/finetune-generate`) | [WORKERS] + [CLI] | training.jsonl, grader.js | records, graders |
 | 5. eval | [USER] (`/finetune-eval`) | [GATEWAY] (inference) + [CLI] + [WORKERS] (refine) | test-runs/, grader.js (if refined) | evaluation_runs, evaluation_record_scores, graders |
@@ -1545,7 +1564,7 @@ Detailed steps:
 |---|---|---|---|---|
 | init | — | — | config.json, journal, analysis.json | `workflows` |
 | sources | local paths | URIs → cache | knowledge/, trace-analysis/ | `source_documents`, `otel_traces`, `knowledge_parts`, `workflows.trace_meta_json` |
-| import-dataset | — | URI → cache | training.jsonl | `records` |
+| import-records | — | URI → cache | training.jsonl | `records` |
 | plan | knowledge/, trace-analysis/ | — | topics.json, relations.json, grader-draft.js, plan.md | `topics`, `relations` |
 | generate | topics/, knowledge/, grader-draft.js | — | training.jsonl, grader.js, change-log.md | `records`, `graders` v1→v2 |
 | eval | training.jsonl, grader.js | gateway runs inference | test-runs/eval-{N}.json, grader.js (if refined), grader-diff.md | `evaluation_runs`, `evaluation_record_scores`, `graders` v3+ |
@@ -1560,7 +1579,7 @@ All phases also write `analysis.json` (local) → mirror to `workflows.analysis_
 ```
   init → sources → plan → generate → eval*(1..5) → train*(1..3) → done
                                   OR
-         → import-dataset → [plan=skipped, generate=done] → eval → train
+         → import-records → [plan=skipped, generate=done] → eval → train
 ```
 
 Re-running any command:
@@ -1820,7 +1839,7 @@ CREATE TABLE training_metrics (
 
 Every command writes `analysis_json` on `workflows` (single "user-facing summary" column), so that's omitted from the matrix below.
 
-| Table | init | sources | import-dataset | plan | generate | eval | train |
+| Table | init | sources | import-records | plan | generate | eval | train |
 |---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
 | `workflows` (row) | ✍ create | ✍ status, trace_meta | ✍ status | ✍ status | ✍ status | ✍ status, selected_model | ✍ status |
 | `source_documents` | | ✍ (+origin_uri) | | | | | |
@@ -1828,7 +1847,7 @@ Every command writes `analysis_json` on `workflows` (single "user-facing summary
 | `knowledge_parts` | | ✍ | | | ✍ topic_id | | |
 | `topics` | | | | ✍ create | ✍ reconcile | | |
 | `relations` | | | | ✍ | | | |
-| `records` | | | ✍ (+origin_uri, +origin_dataset_id) | | ✍ | | |
+| `records` | | | ✍ (+origin_uri, +origin_source_id) | | ✍ | | |
 | `graders` | | | | | ✍ v1→v2 | ✍ v3+ (refine) | |
 | `evaluation_runs` | | | | | | ✍ | |
 | `evaluation_record_scores` | | | | | | ✍ | |
@@ -1937,7 +1956,7 @@ Single source of truth for "where am I." `status` walks this file in order.
 
 ### 4.5 External source URIs
 
-Both `sources` and `import-dataset` accept local paths **or** URIs from external storage. URI resolution happens in `vllora/cli/finetune/sources/` adapters — one per scheme.
+Both `sources` and `import-records` accept local paths **or** URIs from external storage. URI resolution happens in `vllora/finetune/src/sources_adapters/` — one adapter per scheme.
 
 #### Supported schemes
 
@@ -1966,7 +1985,7 @@ class SourceAdapter:
         """
 ```
 
-**Workers never know about URIs** — they always receive local paths. URI handling is strictly at the `sources` / `import-dataset` boundary.
+**Workers never know about URIs** — they always receive local paths. URI handling is strictly at the `sources` / `import-records` boundary.
 
 #### Provenance in DB
 
@@ -1975,8 +1994,8 @@ Every uploaded artifact records where it came from:
 ```sql
 ALTER TABLE source_documents ADD COLUMN origin_uri TEXT;
 ALTER TABLE otel_traces      ADD COLUMN origin_uri TEXT;
-ALTER TABLE records          ADD COLUMN origin_uri TEXT;         -- populated by import-dataset
-ALTER TABLE records          ADD COLUMN origin_dataset_id TEXT;  -- HF dataset ID or similar
+ALTER TABLE records          ADD COLUMN origin_uri TEXT;         -- populated by import-records
+ALTER TABLE records          ADD COLUMN origin_source_id TEXT;  -- HF dataset ID or similar
 ```
 
 This supports: audit ("where did this record come from?"), reproducibility, and a future `vllora finetune refresh --from-origin <workflow-id>` utility to re-fetch updated source data.
@@ -2244,7 +2263,7 @@ Each row: **inputs** → command → **files written** + **DB writes** + **user-
 | Files written | `training.jsonl`, `quality-checker/grader.js` (finalized), `quality-checker/change-log.md`, updated `topics.json` (post-reconcile), `analysis.json` (generate section + quality-gate result) |
 | DB writes | `records`, `graders` (active), `topics` (reconciled UUIDs) |
 | Workers used | `record_generator` (per topic, parallel), `grader_drafter` (finalize mode — tests draft against records, adjusts) |
-| Scripts used | `derive_ground_truth.py`, `reconcile-topics --apply`, `validate_dataset.py`, `data_quality_gate.py`, `dry_run_grader.py` |
+| Scripts used | `derive_ground_truth.py`, `reconcile-topics --apply`, `validate_records.py`, `data_quality_gate.py`, `dry_run_grader.py` |
 | Journal entry | `{ generate: { status: done, record_count: N, quality_gate: pass|fail } }` |
 | Output (pass) | `Generated N records. Quality gate: PASS. Next: /finetune-eval` |
 | Output (fail) | `Quality gate: FAIL (reason). Re-run /finetune-plan --fix, then /finetune-generate.` |
@@ -2279,7 +2298,7 @@ Each row: **inputs** → command → **files written** + **DB writes** + **user-
              quality-checker/change-log.md
        │
        ▼
- validate_dataset.py                 (deterministic)
+ validate_records.py                 (deterministic)
  data_quality_gate.py                (deterministic)
        │
    ┌───┴────┐
@@ -2484,22 +2503,22 @@ Each row: **inputs** → command → **files written** + **DB writes** + **user-
   Next: /finetune-plan"
 ```
 
-### 5.9 `import-dataset <path-or-uri> [--schema X]`
+### 5.9 `import-records <path-or-uri> [--schema X]`
 
-Alternative entry path to `sources → plan → generate`. Skips record generation for users who already have a training dataset.
+Alternative entry path to `sources → plan → generate`. Skips record generation for users who already have pre-built training records.
 
 | Aspect | Value |
 |---|---|
 | Preconditions | `init` done |
 | Inputs | Local path or URI to a `.jsonl`/`.parquet`/HF-dataset; optional `--schema` hint |
 | Files written | `training.jsonl`, `analysis.json` (generate section with `imported: true`) |
-| DB writes | `records` (each with `origin_uri` + `origin_dataset_id`) |
+| DB writes | `records` (each with `origin_uri` + `origin_source_id`) |
 | Adapters used | Whichever URI scheme present |
 | Cache | `~/.vllora/cache/sources/...` (same cache as `sources`) |
-| Scripts used | `validate_dataset.py` (schema check), `data_quality_gate.py` (optional) |
+| Scripts used | `validate_records.py` (schema check), `data_quality_gate.py` (optional) |
 | Journal entry | `{ plan: { status: skipped, reason: imported }, generate: { status: done, imported: true, record_count: N } }` |
 | Output (ok) | `Imported N records from <uri>. Next: /finetune-eval` |
-| Output (fail) | `Invalid dataset: <reason>. Supported schemas: openai-chat, ...` |
+| Output (fail) | `Invalid records: <reason>. Supported schemas: openai-chat, ...` |
 
 ```
  arguments = path or URI + optional --schema
@@ -2513,18 +2532,18 @@ Alternative entry path to `sources → plan → generate`. Skips record generati
    custom (use --schema to map fields)
        │
        ▼
- validate_dataset.py (schema + required fields)
+ validate_records.py (schema + required fields)
        │
    ┌───┴────┐
   OK     INVALID
    │        │
-   │        └─▶ exit. "Invalid dataset: <reason>."
+   │        └─▶ exit. "Invalid records: <reason>."
    ▼
  optional: data_quality_gate.py (warn, not block)
        │
        ▼
  write training.jsonl (with origin_uri per record)
- upload → DB records (with origin_uri, origin_dataset_id)
+ upload → DB records (with origin_uri, origin_source_id)
  journal:
    plan     → skipped (reason: imported)
    generate → done (imported: true)
@@ -2533,7 +2552,7 @@ Alternative entry path to `sources → plan → generate`. Skips record generati
  "Imported N records from <uri>. Next: /finetune-eval"
 ```
 
-> Users with both raw materials AND an existing dataset can run `sources → plan → generate` then `import-dataset --augment` to merge records. (Deferred to a later version — v0 treats the two paths as mutually exclusive.)
+> Users with both raw materials AND pre-built records can run `sources → plan → generate` then `import-records --augment` to merge records. (Deferred to a later version — v0 treats the two paths as mutually exclusive.)
 
 ### 5.10 Grader authoring lifecycle (cross-command)
 
@@ -2623,7 +2642,7 @@ finetune-project/test-runs/
 
 ## 6. Worker Protocol
 
-Workers are Python classes in `vllora/cli/finetune/workers/*.py` that wrap `claude -p` subprocess calls. This section specifies the contract: how pipeline verbs invoke workers, what the prompt structure is, and what output each worker produces.
+Workers are Rust modules in `vllora/gateway/src/cli/commands/finetune/workers/*.rs` that wrap `claude -p` subprocess calls. Prompt templates live alongside them in `vllora/finetune/src/prompts/*.md`. This section specifies the contract: how pipeline verbs invoke workers, what the prompt structure is, and what output each worker produces.
 
 ### 6.1 Invocation contract
 
@@ -2650,7 +2669,7 @@ Every worker **returns a typed result object** — not just stdout text. This is
 
 ### 6.2 `claude -p` invocation
 
-The shared `claude_client.py` wrapper emits:
+The shared `claude_client.rs` wrapper emits:
 
 ```bash
 claude -p \
@@ -2679,7 +2698,7 @@ The final `result` block contains the worker's output (plain text or JSON, per w
 
 ### 6.3 Prompt structure
 
-All worker system prompts follow this template, stored in `vllora/cli/finetune/prompts/<worker>.md`:
+All worker system prompts follow this template, stored in `vllora/finetune/src/prompts/<worker>.md`:
 
 ```markdown
 # Worker: <worker-name>
@@ -2720,7 +2739,7 @@ Every worker subprocess supports clean cancellation:
 
 1. **User triggers cancel** (e.g., `vllora finetune cancel-training --id X` or SIGINT).
 2. Pipeline verb sets `cancel_token` flag.
-3. `claude_client.py` sends SIGTERM to the `claude -p` subprocess.
+3. `claude_client.rs` sends SIGTERM to the `claude -p` subprocess.
 4. `claude -p` cleans up in-flight tool uses (subprocess tree killed together).
 5. Worker's `run()` raises `CancelledError`.
 6. Pipeline verb logs cancellation to journal (`{ status: "cancelled" }`), exits non-zero.
@@ -2853,7 +2872,7 @@ Long-running. Only worker that polls external state continuously.
 │   ├── finetune-quickstart.md             (guided wizard — §7.3.2)
 │   ├── finetune-init.md                   (scaffold workflow)
 │   ├── finetune-sources.md                (ingest PDFs / traces / URIs)
-│   ├── finetune-import-dataset.md         (pre-built dataset entry)
+│   ├── finetune-import-records.md         (pre-built records entry)
 │   ├── finetune-plan.md                   (topics + grader draft)
 │   ├── finetune-generate.md               (records + finalize grader)
 │   ├── finetune-eval.md                   (readiness gate + iterate)
@@ -2880,7 +2899,7 @@ Long-running. Only worker that polls external state continuously.
   "$schema": "https://claude.com/schemas/plugin.json",
   "name": "vllora-finetune",
   "version": "0.6.0",
-  "description": "Fine-tune small LLMs from PDFs, OTel traces, or pre-built datasets using GRPO.",
+  "description": "Fine-tune small LLMs from PDFs, OTel traces, or pre-built records using GRPO.",
   "author": { "name": "vllora", "url": "https://vllora.dev" },
   "homepage": "https://vllora.dev",
   "commands": ["commands/*.md"],
@@ -3157,36 +3176,103 @@ Both ship from the same pip package (§3 Distribution Architecture). Rules:
 
 ## 8. File Layout
 
-### 7.1 In the `vllora` pip package
+### 7.1 In the `vllora` Rust workspace
+
+> The workspace ships as a single `vllora` binary. End users install it via a maturin-built pip wheel (like `ruff` / `uv`) — `pip install vllora` and `pip install vllora[finetune]` still work. `vft` is an optional thin wrapper that execs `vllora finetune …`.
+
+
 
 ```
-vllora/
-├── pyproject.toml                   # [project.scripts]: vllora, vft
-├── cli/
-│   ├── __main__.py                  # `vllora` entry
-│   ├── finetune_main.py             # `vft` entry (scoped to `finetune` group)
-│   ├── lifecycle/                   # init, doctor, uninstall, upgrade, config
-│   ├── gateway/                     # start, stop, status, logs, reset
-│   ├── ui/                          # start, stop, open
-│   └── finetune/
-│       ├── init.py, sources.py, plan.py, generate.py, eval.py,
-│       │   train.py, status.py, quickstart.py, auto.py
-│       ├── utilities/               # cancel-eval, grader-sanity-check, ...
-│       ├── workers/                 # AI workers — shell out to `claude -p`
-│       │   ├── claude_client.py     # subprocess wrapper, stream-json parser
-│       │   ├── knowledge_extractor.py
-│       │   ├── relation_builder.py
-│       │   ├── trace_analyzer.py
-│       │   ├── record_generator.py
-│       │   ├── grader_drafter.py
-│       │   └── training_monitor.py
-│       └── prompts/                 # system prompts loaded by workers
-├── scripts/                         # deterministic pipeline scripts (unchanged)
-└── plugin/                          # Claude Code plugin bundle
-    ├── plugin.json
-    ├── commands/                    # 8 slash commands
-    ├── skills/                      # reference skills (pipeline-context, grader-writing, ...)
-    └── resources/                   # templates, reference docs
+vllora/                                             # Rust workspace root
+├── Cargo.toml                                      # workspace manifest
+├── gateway/                                        # bin crate = `vllora`
+│   ├── Cargo.toml
+│   └── src/
+│       ├── main.rs                                 # CLI dispatch anchor
+│       ├── cli/
+│       │   ├── mod.rs                              # clap Commands enum (Serve, List, Sync,
+│       │   │                                       #   Traces, Finetune, Doctor, Version, Config, …)
+│       │   └── commands/
+│       │       ├── mod.rs                          # module registry
+│       │       ├── serve.rs, list.rs, sync.rs,     # existing server commands
+│       │       │   traces.rs, generate_models_json.rs
+│       │       ├── doctor.rs, version.rs, config.rs  # Feature 005 lifecycle
+│       │       └── finetune/                       # pipeline subcommand tree
+│       │           ├── mod.rs                      # FinetuneCommand enum + dispatcher
+│       │           ├── init.rs, sources.rs,
+│       │           │   import_records.rs,
+│       │           │   plan.rs, generate.rs,
+│       │           │   eval.rs, train.rs,
+│       │           │   status.rs, quickstart.rs,
+│       │           │   auto.rs                     # Layer A verbs
+│       │           ├── jobs/                       # Layer B `jobs <verb>` wrappers
+│       │           │   ├── mod.rs
+│       │           │   ├── status.rs, knowledge.rs,
+│       │           │   │   records.rs, grader.rs,
+│       │           │   │   eval.rs, train.rs,
+│       │           │   │   test_job.rs
+│       │           └── workers/                    # claude -p subprocess orchestrators
+│       │               ├── mod.rs
+│       │               ├── claude_client.rs        # subprocess wrapper, stream-JSON parser
+│       │               ├── knowledge_extractor.rs,
+│       │               │   relation_builder.rs,
+│       │               │   trace_analyzer.rs,
+│       │               │   record_generator.rs,
+│       │               │   grader_drafter.rs,     # 3 modes: init / finalize / refine
+│       │               │   training_monitor.rs
+│       └── setup/                                  # Feature 005 idempotent machine setup
+│           ├── mod.rs                              # SetupStatus, ensure_plugin_symlink(),
+│           │                                       #   claude_readiness()
+│           ├── plugin_symlink.rs
+│           └── claude_readiness.rs
+├── finetune/                                       # reusable crate (state + adapters + prompts)
+│   ├── Cargo.toml
+│   └── src/
+│       ├── lib.rs                                  # re-exports state, sources_adapters, prompts
+│       ├── client.rs, types.rs                     # existing cloud client
+│       ├── state/                                  # Feature 002 artifact state machine
+│       │   ├── mod.rs                              # Journal / Analysis / ChangeLog / ExecutionLog
+│       │   ├── journal.rs                          # pipeline-journal.json read/write
+│       │   ├── analysis.rs                         # analysis.json append-only
+│       │   ├── change_log.rs, execution_log.rs
+│       │   ├── atomic_write.rs                     # write-tmp + fsync + rename
+│       │   ├── lock.rs                             # single-writer advisory lock
+│       │   └── schemas/
+│       │       ├── journal.schema.json
+│       │       └── analysis.schema.json
+│       ├── sources_adapters/                       # URI resolvers (workers never see URIs)
+│       │   ├── mod.rs                              # SourceAdapter trait
+│       │   ├── local.rs, hf.rs, s3.rs,
+│       │   │   gs.rs, azblob.rs, https.rs
+│       └── prompts/                                # claude -p system-prompt templates
+│           ├── knowledge-extractor.md,
+│           │   relation-builder.md,
+│           │   trace-analyzer.md,
+│           │   record-generator.md,
+│           │   training-monitor.md
+│           └── grader-drafter-init.md,
+│               grader-drafter-finalize.md,
+│               grader-drafter-refine.md
+├── core/, guardrails/, llm/, telemetry/            # other workspace crates
+├── finetune-skill/scripts/                         # deterministic Python helpers (existing)
+│                                                   #   validate_records.py, data_quality_gate.py,
+│                                                   #   derive_ground_truth.py, probe_difficulty.py,
+│                                                   #   analyze_training.py, …
+│                                                   # Rust CLI verbs shell out to these.
+└── plugin/                                         # Claude Code plugin bundle (symlinked on install)
+    ├── plugin.json                                 # `vllora-finetune` manifest
+    ├── commands/                                   # 1 orchestrator + 9 thin verbs
+    │   ├── finetune.md                             # orchestrator
+    │   └── finetune-{quickstart,init,sources,
+    │       import-records,plan,generate,eval,
+    │       train,status}.md                        # thin verbs
+    ├── skills/                                     # reference skills
+    │   ├── pipeline-context/SKILL.md
+    │   ├── grader-writing/SKILL.md
+    │   ├── topic-hierarchy/SKILL.md
+    │   ├── readiness-gate/SKILL.md
+    │   └── nemo-guide/SKILL.md
+    └── resources/                                  # templates, reference docs
 ```
 
 ### 7.2 On the user's machine (after `vllora init`)
@@ -3282,7 +3368,7 @@ steps:
 8. Worker tool scoping — audit `--allowedTools` list per worker (e.g., `training-monitor` only needs `Read`, `Write`, `Bash(curl *)`).
 9. Token cost disclosure — should `/finetune-status` track cumulative token usage per workflow?
 10. Dev plugin split — should `/finetune-run <scenario>`, `/finetune-analyze`, `/finetune-kill`, `/finetune-test-loop` move to a separate `vllora[dev]` plugin?
-11. **Prompt caching behavior with `claude -p`.** Load-bearing for cost: §14.9 shows the new architecture is 4–5× more expensive than the monolithic approach **without** prompt caching. Need to verify: (a) does `claude -p` use prefix caching automatically across sequential subprocess invocations from the same machine? (b) what's the cache TTL? (c) how much does our shared prefix (objective + pipeline-context + accumulated handoff) benefit from it? Add a measurement harness before P1 implementation locks in.
+11. **Prompt caching behavior with `claude -p`.** Load-bearing for cost: §14.9 shows the new architecture is 4–5× more expensive than the monolithic approach **without** prompt caching. Need to verify: (a) does `claude -p` use prefix caching automatically across sequential subprocess invocations from the same machine? (b) what's the cache TTL? (c) how much does our shared prefix (objective + pipeline-context + accumulated handoff) benefit from it? Add a measurement harness before Feature 003 (`cli-pipeline-verbs`) implementation locks in.
 12. **Run-replay contract test.** Goal: verify context-carrier artifacts preserve old-agent capability. Given a completed pipeline run's artifacts, can a fresh `claude -p` worker make the same decision at a given step? If not, artifacts are too sparse. See §14.9 for the test design.
 
 ---
@@ -3433,7 +3519,7 @@ Cases where the new architecture is demonstrably worse than the old:
 For these cases, power users can always:
 1. Run `vllora finetune` verbs manually with flags (`--force`, custom configs).
 2. Edit artifacts (`topics.json`, `grader.js`) directly.
-3. Use the old `SKILL.md` path during the transition (P0–P8 per the migration in the companion doc).
+3. Use the old monolithic `finetune-skill/SKILL.md` path during the transition — existing users can keep it working until Feature 003 (`cli-pipeline-verbs`) is complete and Feature 004 (`claude-code-plugin`) ships the orchestrator.
 
 ### 14.7 Decision
 
